@@ -12,13 +12,11 @@ void print_error(const char *funcname, const char *format, ...)
 	vfprintf(stderr, format, args);
 	fprintf(stderr, "\n");
 
-	if (errno) {
-		if (funcname && *funcname != '\0')
-			fprintf(stderr, "%s(%d): ", funcname, errno);
-		else
-			fprintf(stderr, "error(%d): ", errno);
-		fprintf(stderr, "%s\n", strerror(errno));
-	}
+	if (errno)
+		fprintf(stderr, "%s(%d): %s\n",
+				(funcname && *funcname != '\0') ? funcname : "error",
+				errno,
+				strerror(errno));
 
 	va_end(args);
 }
