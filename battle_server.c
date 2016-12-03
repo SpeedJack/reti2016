@@ -6,7 +6,6 @@
 void print_error(const char *funcname, const char *format, ...)
 {
 	va_list args;
-	char *errmsg;
 
 	va_start(args, format);
 
@@ -14,12 +13,11 @@ void print_error(const char *funcname, const char *format, ...)
 	fprintf(stderr, "\n");
 
 	if (errno) {
-		errmsg = strerror(errno);
 		if (funcname && *funcname != '\0')
 			fprintf(stderr, "%s(%d): ", funcname, errno);
 		else
 			fprintf(stderr, "error(%d): ", errno);
-		fprintf(stderr, "%s\n", errmsg);
+		fprintf(stderr, "%s\n", strerror(errno));
 	}
 
 	va_end(args);
