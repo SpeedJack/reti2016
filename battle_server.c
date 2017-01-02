@@ -13,20 +13,17 @@
 #define LISTEN_BACKLOG	20
 
 #define _STRINGIZE(x)	#x
-
 #define STRINGIZE(x)	_STRINGIZE(x)
 
-#define PRINT_LOCATION	fprintf(stderr, "%s:%s: %s(): ", \
-				__FILE__, STRINGIZE(__LINE__), __func__);
-
-#define PRINT_ERROR(msg)	if (errno) perror(msg);\
-				else do {\
-					fprintf(stderr, msg);\
-					fprintf(stderr, "\n");\
-				} while (0)
-
-#define handle_error(msg)	do { PRINT_LOCATION PRINT_ERROR(msg); \
-		exit(EXIT_FAILURE); } while (0)
+#define handle_error(msg)	do {\
+			fprintf(stderr, "%s:%s: %s(): ", \
+				__FILE__, STRINGIZE(__LINE__), __func__);\
+			if (errno)\
+				perror(msg);\
+			else\
+				fprintf(stderr, "%s\n", msg);\
+			exit(EXIT_FAILURE);\
+		} while (0)
 
 int main(int argc, char **argv)
 {
