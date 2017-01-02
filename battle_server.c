@@ -7,8 +7,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define MIN_PORT_NUMBER	1
-#define MAX_PORT_NUMBER	65535
 #define LISTEN_BACKLOG	20
 
 #define _STRINGIZE(x)	#x
