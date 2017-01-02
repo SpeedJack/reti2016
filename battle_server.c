@@ -9,12 +9,9 @@
 
 #define LISTEN_BACKLOG	20
 
-#define _STRINGIZE(x)	#x
-#define STRINGIZE(x)	_STRINGIZE(x)
-
 #define handle_error(msg)	do {\
-			fprintf(stderr, "%s:%s: %s(): ", \
-				__FILE__, STRINGIZE(__LINE__), __func__);\
+			fprintf(stderr, "%s:%d: %s(): ", \
+				__FILE__, __LINE__, __func__);\
 			if (errno)\
 				perror(msg);\
 			else\
