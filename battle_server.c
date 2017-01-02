@@ -16,11 +16,14 @@
 
 #define STRINGIZE(x)	_STRINGIZE(x)
 
-#define PRINT_LOCATION	fprintf(stderr, "%s:%s: %s(): ", __FILE__, \
-		STRINGIZE(__LINE__), __func__);
+#define PRINT_LOCATION	fprintf(stderr, "%s:%s: %s(): ", \
+				__FILE__, STRINGIZE(__LINE__), __func__);
 
-#define PRINT_ERROR(msg)	if (errno) perror(msg); else \
-		do { fprintf(stderr, msg); fprintf(stderr, "\n"); } while (0)
+#define PRINT_ERROR(msg)	if (errno) perror(msg);\
+				else do {\
+					fprintf(stderr, msg);\
+					fprintf(stderr, "\n");\
+				} while (0)
 
 #define handle_error(msg)	do { PRINT_LOCATION PRINT_ERROR(msg); \
 		exit(EXIT_FAILURE); } while (0)
