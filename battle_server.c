@@ -18,29 +18,24 @@
 				perror(msg);\
 			else\
 				fprintf(stderr, "%s\n", msg);\
+			errno = 0;\
 		} while (0)
 
-const char *get_addr_str(const struct sockaddr *sa, char *addr, uint16_t *port)
+uint16_t get_port(const struct sockaddr *sa)
 {
 	switch(sa->sa_family) {
 	case AF_INET:
-		*port = ntohs(((struct sockaddr_in *)sa)->sin_port);
-		return inet_ntop(AF_INET,
-				&(((struct sockaddr_in *)sa)->sin_addr),
-				addr, ADDRSTRLEN);
+		return ntohs(((struct sockaddr_in *)sa)->sin_port);
 	case AF_INET6:
-		*port = ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
-		return inet_ntop(AF_INET6,
-				&(((struct sockaddr_in6 *)sa)->sin6_addr),
-				addr, ADDRSTRLEN);
+		return ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
 	}
-	return NULL;
+	return 0;
 }
 
 int start_listening(const struct addrinfo hints, const char *service)
 {
 	struct addrinfo *result, *rp;
-	int s, sfd, err;
+	int s, sfd;
 	uint16_t port;
 	char buff[ADDRSTRLEN];
 
@@ -64,16 +59,14 @@ int start_listening(const struct addrinfo hints, const char *service)
 
 	memset(&buff, '\0', ADDRSTRLEN);
 
-	if (!rp || !get_addr_str(rp->ai_addr, buff, &port)) {
-		err = errno;
+	if (!rp || !(port = get_port(rp->ai_addr))) {
 		freeaddrinfo(result);
 		if (sfd)
 			close(sfd);
-		errno = err;
 		return 0;
 	}
 
-	printf("Server listening on %s (port: %d)\n", buff, port);
+	printf("Server listening on port %d\n", port);
 
 	freeaddrinfo(result);
 	return sfd;
@@ -82,7 +75,7 @@ int start_listening(const struct addrinfo hints, const char *service)
 int main(int argc, char **argv)
 {
 	struct addrinfo hints;
-	int sfd;
+	int sfd, connfd;
 
 	if (argc != 2) {
 		printf("Usage: %s <port>\n", argv[0]);
@@ -95,10 +88,13 @@ int main(int argc, char **argv)
 	hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV |
 			AI_V4MAPPED | AI_ADDRCONFIG;
 
-	if (!(sfd = start_listening(hints, argv[1]))) {
+	sfd = start_listening(hints, argv[1]);
+	if (!sfd) {
 		print_error("Could not create socket");
 		exit(EXIT_FAILURE);
 	}
+
+	connfd = accept(sfd, NULL, NULL);
 
 	close(sfd);
 	exit(EXIT_SUCCESS);
