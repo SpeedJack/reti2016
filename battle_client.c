@@ -15,6 +15,7 @@
 #define USERNAME_MAX_LENGTH	32
 #define USERNAME_ALLOWED_CHARS	\
 	"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+#define USHORT_BUFFER_SIZE	10
 
 #define print_error(msg)	do {\
 			fprintf(stderr, "%s:%d: %s(): ", \
@@ -53,7 +54,7 @@ int connect_to_server(const struct addrinfo hints, const char *node,
 	uint16_t port;
 	char buff[ADDRSTRLEN];
 
-	if ((s = getaddrinfo(node, service, &hints, &result)) != 0) {
+	if (s = getaddrinfo(node, service, &hints, &result)) {
 		print_error(gai_strerror(s));
 		exit(EXIT_FAILURE);
 	}
@@ -113,6 +114,17 @@ int get_line(char *buffer, size_t size)
 	return len - 1;
 }
 
+bool get_ushort(unsigned short *num)
+{
+	char buffer[USHORT_BUFFER_SIZE];
+
+	if (get_line(buffer, USHORT_BUFFER_SIZE) >= USHORT_BUFFER_SIZE)
+		return false;
+	if (sscanf(buffer, "%hu", num) != 1)
+		return false;
+	return true;
+}
+
 bool valid_username(const char *username, size_t length)
 {
 	size_t i;
@@ -133,8 +145,10 @@ static void login()
 {
 	char username[USERNAME_MAX_LENGTH+1];
 	int len;
+	unsigned short portbuff;
+	uint16_t port;
 
-	do {
+	do { /* TODO: move to a function */
 		printf("Insert your username: ");
 		len = get_line(username, USERNAME_MAX_LENGTH + 1);
 
@@ -146,8 +160,27 @@ static void login()
 			continue;
 		}
 
-		break; /* TODO: login with server */
+		do {
+			printf("Insert your UDP port for incoming connections: ");
+			if (!get_ushort(&portbuff) || portbuff == 0) {
+				printf("Invalid port. Port must be an integer value in the range 1-65535.\n");
+				continue;
+			}
+
+			port = htons((uint16_t)portbuff);
+
+			if (!test_local_port(port)) {
+				perror("Could not connect to this UDP port");
+				continue;
+			}
+
+			break;
+		} while (1);
+
+		break;
 	} while (1);
+
+	/* TODO */
 }
 
 int main(int argc, char **argv)
