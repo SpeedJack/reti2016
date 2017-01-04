@@ -26,7 +26,7 @@ int set_nonblocking(int fd)
 
 	if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
 		flags = 0;
-	return fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1;
+	return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
 uint16_t get_port(const struct sockaddr *sa)
@@ -58,8 +58,7 @@ int start_listening(const struct addrinfo hints, const char *service)
 
 		if (bind(sfd, rp->ai_addr, rp->ai_addrlen) == 0 &&
 				listen(sfd, LISTEN_BACKLOG) == 0 &&
-				(port = get_port(rp->ai_addr)) &&
-				set_nonblocking(sfd))
+				(port = get_port(rp->ai_addr)))
 			break;
 
 		close(sfd);
@@ -100,6 +99,7 @@ int main(int argc, char **argv)
 	}
 
 	connfd = accept(sfd, NULL, NULL);
+	set_nonblocking(connfd);
 
 	close(sfd);
 	exit(EXIT_SUCCESS);
