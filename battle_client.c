@@ -141,6 +141,11 @@ bool valid_username(const char *username, size_t length)
 	return true;
 }
 
+int open_local_port(uint16_t port)
+{
+	return true;
+}
+
 static void login()
 {
 	char username[USERNAME_MAX_LENGTH+1];
@@ -169,8 +174,8 @@ static void login()
 
 			port = htons((uint16_t)portbuff);
 
-			if (!test_local_port(port)) {
-				perror("Could not connect to this UDP port");
+			if (!open_local_port(port)) {
+				perror("Could not open this UDP port");
 				continue;
 			}
 
