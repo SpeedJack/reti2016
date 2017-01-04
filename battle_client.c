@@ -120,6 +120,8 @@ bool valid_username(const char *username, size_t length)
 	if (length < USERNAME_MIN_LENGTH || length > USERNAME_MAX_LENGTH)
 		return false;
 
+	assert(username[length] == '\0');
+
 	for (i = 0; i < length && username[i] != '\0'; i++)
 		if (!strchr(USERNAME_ALLOWED_CHARS, username[i]))
 			return false;
