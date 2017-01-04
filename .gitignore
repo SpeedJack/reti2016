@@ -1,3 +1,7 @@
+# exes
+/battle_client
+/battle_server
+
 # vim
 *.swp
 
