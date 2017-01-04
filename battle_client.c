@@ -54,7 +54,7 @@ int connect_to_server(const struct addrinfo hints, const char *node,
 	uint16_t port;
 	char buff[ADDRSTRLEN];
 
-	if (s = getaddrinfo(node, service, &hints, &result)) {
+	if ((s = getaddrinfo(node, service, &hints, &result))) {
 		print_error(gai_strerror(s));
 		exit(EXIT_FAILURE);
 	}

@@ -46,7 +46,7 @@ int start_listening(const struct addrinfo hints, const char *service)
 	int s, sfd;
 	uint16_t port;
 
-	if (s = getaddrinfo(NULL, service, &hints, &result)) {
+	if ((s = getaddrinfo(NULL, service, &hints, &result))) {
 		print_error(gai_strerror(s));
 		exit(EXIT_FAILURE);
 	}
