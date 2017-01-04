@@ -1,15 +1,14 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
 #define LISTEN_BACKLOG	20
-#define	ADDRSTRLEN	INET6_ADDRSTRLEN + 1
 
 #define print_error(msg)	do {\
 			fprintf(stderr, "%s:%d: %s(): ", \
@@ -20,6 +19,15 @@
 				fprintf(stderr, "%s\n", msg);\
 			errno = 0;\
 		} while (0)
+
+int set_nonblocking(int fd)
+{
+	int flags;
+
+	if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
+		flags = 0;
+	return fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1;
+}
 
 uint16_t get_port(const struct sockaddr *sa)
 {
@@ -37,9 +45,8 @@ int start_listening(const struct addrinfo hints, const char *service)
 	struct addrinfo *result, *rp;
 	int s, sfd;
 	uint16_t port;
-	char buff[ADDRSTRLEN];
 
-	if ((s = getaddrinfo(NULL, service, &hints, &result)) != 0) {
+	if (s = getaddrinfo(NULL, service, &hints, &result)) {
 		print_error(gai_strerror(s));
 		exit(EXIT_FAILURE);
 	}
@@ -50,19 +57,17 @@ int start_listening(const struct addrinfo hints, const char *service)
 			continue;
 
 		if (bind(sfd, rp->ai_addr, rp->ai_addrlen) == 0 &&
-				listen(sfd, LISTEN_BACKLOG) == 0)
+				listen(sfd, LISTEN_BACKLOG) == 0 &&
+				(port = get_port(rp->ai_addr)) &&
+				set_nonblocking(sfd))
 			break;
 
 		close(sfd);
 		sfd = 0;
 	}
 
-	memset(&buff, '\0', ADDRSTRLEN);
-
-	if (!rp || !(port = get_port(rp->ai_addr))) {
+	if (!rp) {
 		freeaddrinfo(result);
-		if (sfd)
-			close(sfd);
 		return 0;
 	}
 
