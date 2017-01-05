@@ -141,21 +141,13 @@ bool valid_username(const char *username, size_t length)
 	return true;
 }
 
-int open_local_port(uint16_t port)
+static int ask_username(char *username)
 {
-	return true;
-}
-
-static void login()
-{
-	char username[USERNAME_MAX_LENGTH+1];
 	int len;
-	unsigned short portbuff;
-	uint16_t port;
 
-	do { /* TODO: move to a function */
+	do {
 		printf("Insert your username: ");
-		len = get_line(username, USERNAME_MAX_LENGTH + 1);
+		len = get_line(username, USERNAME_MAX_LENGTH+1);
 
 		if (!valid_username(username, len)) {
 			printf("Invalid username. Username must be at least %d characters and less than %d characters and can contain only these characters:\n%s\n",
@@ -165,27 +157,49 @@ static void login()
 			continue;
 		}
 
-		do {
-			printf("Insert your UDP port for incoming connections: ");
-			if (!get_ushort(&portbuff) || portbuff == 0) {
-				printf("Invalid port. Port must be an integer value in the range 1-65535.\n");
-				continue;
-			}
-
-			port = htons((uint16_t)portbuff);
-
-			if (!open_local_port(port)) {
-				perror("Could not open this UDP port");
-				continue;
-			}
-
-			break;
-		} while (1);
-
-		break;
+		return len;
 	} while (1);
+}
 
-	/* TODO */
+int open_local_port(uint16_t port)
+{
+	return true;
+}
+
+static uint16_t ask_port()
+{
+	unsigned short buffer;
+	uint16_t port;
+
+	do {
+		printf("Insert your UDP port for incoming connections: ");
+		if (!get_ushort(&buffer) || buffer == 0) {
+			printf("Invalid port. Port must be an integer value in the range 1-65535.\n");
+			continue;
+		}
+
+		port = htons((uint16_t)buffer);
+
+		if (!open_local_port(port)) {
+			perror("Could not open this UDP port");
+			continue;
+		}
+
+		return port;
+	} while (1);
+}
+
+static void login()
+{
+	char username[USERNAME_MAX_LENGTH+1];
+	uint16_t port;
+
+	do {
+		ask_username(username);
+		port = ask_port();
+	} while (1 /* server responded with fail */ );
+
+	printf("Successfully logged-in as %s.", username);
 }
 
 int main(int argc, char **argv)
