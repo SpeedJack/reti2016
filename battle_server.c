@@ -86,7 +86,7 @@ int main(int argc, char **argv)
 		exit(EXIT_SUCCESS);
 	}
 
-	memset(&hints, 0, sizeof(struct addrinfo));
+	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV |
