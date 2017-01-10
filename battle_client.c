@@ -163,7 +163,23 @@ static int ask_username(char *username)
 
 int open_local_port(uint16_t port)
 {
-	return true;
+	int lsock;
+	struct sockaddr_in sa;
+
+	if (-1 == (lsock = socket(AF_INET, SOCK_DGRAM, 0)))
+		return -1;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sin_family = AF_INET;
+	sa.sin_port = port;
+	sa.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	if (bind(lsock, (struct sockaddr *)&sa, sizeof(sa)) != 0) {
+		close(lsock);
+		return -1;
+	}
+
+	return lsock;
 }
 
 static uint16_t ask_port()
@@ -180,7 +196,7 @@ static uint16_t ask_port()
 
 		port = htons((uint16_t)buffer);
 
-		if (!open_local_port(port)) {
+		if (open_local_port(port) == -1) {
 			perror("Could not open this UDP port");
 			continue;
 		}
