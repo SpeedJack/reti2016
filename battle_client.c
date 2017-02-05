@@ -90,11 +90,11 @@ int connect_to_server(const struct addrinfo hints, const char *node,
 
 static inline void show_help()
 {
-	printf("Available commands:\n"
+	puts("Available commands:\n"
 			"!help --> shows the list of available commands\n"
 			"!who --> shows the list of connected players\n"
 			"!connect username --> starts a game with the player username\n"
-			"!quit --> disconnects and exits\n\n");
+			"!quit --> disconnects and exits\n");
 }
 
 int get_line(char *buffer, size_t size)
@@ -190,7 +190,7 @@ static uint16_t ask_port()
 	do {
 		printf("Insert your UDP port for incoming connections: ");
 		if (!get_ushort(&buffer) || buffer == 0) {
-			printf("Invalid port. Port must be an integer value in the range 1-65535.\n");
+			puts("Invalid port. Port must be an integer value in the range 1-65535.");
 			continue;
 		}
 
