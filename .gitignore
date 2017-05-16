@@ -4,6 +4,7 @@
 
 # vim
 *.swp
+.vimrc
 
 # Prerequisites
 *.d

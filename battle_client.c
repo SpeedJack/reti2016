@@ -1,144 +1,33 @@
 #include <assert.h>
 #include <errno.h>
 #include <netdb.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include "bool.h"
+#include "console.h"
+#include "game_client.h"
+#include "netutil.h"
+#include "proto.h"
 
-
-#define ADDRSTRLEN	INET6_ADDRSTRLEN + 1
-#define USERNAME_MIN_LENGTH	3
-#define USERNAME_MAX_LENGTH	32
-#define USERNAME_ALLOWED_CHARS	\
-	"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_"
-#define USHORT_BUFFER_SIZE	10
-
-#define print_error(msg)	do {\
-			fprintf(stderr, "%s:%d: %s(): ", \
-				__FILE__, __LINE__, __func__);\
-			if (errno)\
-				perror(msg);\
-			else\
-				fprintf(stderr, "%s\n", msg);\
-			errno = 0;\
-		} while (0)
-
-typedef enum { false = 0, true } bool;
-
-const char *get_addr_str(const struct sockaddr *sa, char *addr, uint16_t *port)
-{
-	switch(sa->sa_family) {
-	case AF_INET:
-		*port = ntohs(((struct sockaddr_in *)sa)->sin_port);
-		return inet_ntop(AF_INET,
-				&(((struct sockaddr_in *)sa)->sin_addr),
-				addr, ADDRSTRLEN);
-	case AF_INET6:
-		*port = ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
-		return inet_ntop(AF_INET6,
-				&(((struct sockaddr_in6 *)sa)->sin6_addr),
-				addr, ADDRSTRLEN);
-	}
-	return NULL;
-}
-
-int connect_to_server(const struct addrinfo hints, const char *node,
-		const char *service)
-{
-	struct addrinfo *result, *rp;
-	int s, sfd, err;
-	uint16_t port;
-	char buff[ADDRSTRLEN];
-
-	if ((s = getaddrinfo(node, service, &hints, &result))) {
-		print_error(gai_strerror(s));
-		exit(EXIT_FAILURE);
-	}
-
-	for (rp = result; rp; rp = rp->ai_next) {
-		sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-		if (sfd == -1)
-			continue;
-
-		if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1)
-			break;
-
-		close(sfd);
-		sfd = 0;
-	}
-
-	memset(&buff, '\0', ADDRSTRLEN);
-
-	if (!rp || !get_addr_str(rp->ai_addr, buff, &port)) {
-		err = errno;
-		freeaddrinfo(result);
-		if (sfd)
-			close(sfd);
-		errno = err;
-		return 0;
-	}
-
-	printf("Successfully connected to server %s (port: %d)\n\n", buff, port);
-
-	freeaddrinfo(result);
-	return sfd;
-}
+static bool in_game;
+static int server_sock;
+static int game_sock;
 
 static inline void show_help()
 {
-	puts("Available commands:\n"
+	puts("\nAvailable commands:\n"
 			"!help --> shows the list of available commands\n"
 			"!who --> shows the list of connected players\n"
 			"!connect username --> starts a game with the player username\n"
-			"!quit --> disconnects and exits\n");
-}
-
-int get_line(char *buffer, size_t size)
-{
-	int c, len;
-
-	assert(size > 0);
-
-	fgets(buffer, size, stdin);
-
-	len = strlen(buffer);
-	if (buffer[len-1] == '\n')
-		buffer[len-1] = '\0';
-	else
-		while ((c = getchar()) != '\n' && c != EOF)
-			len++;
-	return len - 1;
-}
-
-bool get_ushort(unsigned short *num)
-{
-	char buffer[USHORT_BUFFER_SIZE];
-
-	if (get_line(buffer, USHORT_BUFFER_SIZE) >= USHORT_BUFFER_SIZE)
-		return false;
-	if (sscanf(buffer, "%hu", num) != 1)
-		return false;
-	return true;
-}
-
-bool valid_username(const char *username, size_t length)
-{
-	size_t i;
-
-	if (length < USERNAME_MIN_LENGTH || length > USERNAME_MAX_LENGTH)
-		return false;
-
-	assert(username[length] == '\0');
-
-	for (i = 0; i < length && username[i] != '\0'; i++)
-		if (!strchr(USERNAME_ALLOWED_CHARS, username[i]))
-			return false;
-
-	return true;
+			"!quit --> disconnects and exits");
 }
 
 static int ask_username(char *username)
@@ -147,12 +36,13 @@ static int ask_username(char *username)
 
 	do {
 		printf("Insert your username: ");
-		len = get_line(username, USERNAME_MAX_LENGTH+1);
+		fflush(stdout);
+		len = get_line(username, MAX_USERNAME_SIZE);
 
-		if (!valid_username(username, len)) {
-			printf("Invalid username. Username must be at least %d characters and less than %d characters and can contain only these characters:\n%s\n",
-					USERNAME_MIN_LENGTH,
-					USERNAME_MAX_LENGTH,
+		if (!valid_username(username) || len > MAX_USERNAME_LENGTH) {
+			printf("Invalid username. Username must be at leas %d characters and less than %d characters and should countain only these characters:\n%s\n",
+					MIN_USERNAME_LENGTH,
+					MAX_USERNAME_LENGTH,
 					USERNAME_ALLOWED_CHARS);
 			continue;
 		}
@@ -161,43 +51,20 @@ static int ask_username(char *username)
 	} while (1);
 }
 
-int open_local_port(uint16_t port)
-{
-	int lsock;
-	struct sockaddr_in sa;
-
-	if (-1 == (lsock = socket(AF_INET, SOCK_DGRAM, 0)))
-		return -1;
-
-	memset(&sa, 0, sizeof(sa));
-	sa.sin_family = AF_INET;
-	sa.sin_port = port;
-	sa.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	if (bind(lsock, (struct sockaddr *)&sa, sizeof(sa)) != 0) {
-		close(lsock);
-		return -1;
-	}
-
-	return lsock;
-}
-
 static uint16_t ask_port()
 {
-	unsigned short buffer;
 	uint16_t port;
 
 	do {
 		printf("Insert your UDP port for incoming connections: ");
-		if (!get_ushort(&buffer) || buffer == 0) {
+		fflush(stdout);
+		if (!get_uint16(&port) || port == 0) {
 			puts("Invalid port. Port must be an integer value in the range 1-65535.");
 			continue;
 		}
 
-		port = htons((uint16_t)buffer);
-
-		if (open_local_port(port) == -1) {
-			perror("Could not open this UDP port");
+		if (-1 == (game_sock = open_local_port(htons(port)))) {
+			puts("Can not open this port.");
 			continue;
 		}
 
@@ -205,49 +72,338 @@ static uint16_t ask_port()
 	} while (1);
 }
 
-static void login()
+static bool do_login()
 {
-	char username[USERNAME_MAX_LENGTH+1];
+	char username[MAX_USERNAME_SIZE];
 	uint16_t port;
+	struct req_login req;
+	struct message *ans;
 
 	do {
 		ask_username(username);
 		port = ask_port();
-	} while (1 /* server responded with fail */ );
 
-	printf("Successfully logged-in as %s.", username);
+		req.header.type = REQ_LOGIN;
+		req.header.length = MSG_BODY_SIZE(struct req_login);
+
+		strncpy(req.username, username, MAX_USERNAME_SIZE);
+		req.udp_port = port;
+
+		if (!write_message(server_sock, (struct message *)&req)) {
+			print_error("Error sending REQ_LOGIN message.", 0);
+			return false;
+		}
+
+		if (!read_message(server_sock, &ans)) {
+			print_error("Error reading message ANS_LOGIN from server.",
+					0);
+			delete_message(ans);
+			return false;
+		}
+
+		if (((struct ans_login *)ans)->response == LOGIN_OK)
+			break;
+
+		switch(((struct ans_login *)ans)->response) {
+		case LOGIN_INVALID_NAME:
+			printf("Invalid username. Username must be at leas %d characters and less than %d characters and should countain only these characters:\n%s\n",
+					MIN_USERNAME_LENGTH,
+					MAX_USERNAME_LENGTH,
+					USERNAME_ALLOWED_CHARS);
+			break;
+		case LOGIN_NAME_INUSE:
+			printf("This username is already in use by another player. Please choose another username.\n");
+			break;
+		default:
+			print_error("Invalid response from server.", 0);
+			delete_message(ans);
+			return false;
+		}
+
+		delete_message(ans);
+		close(game_sock);
+	} while (1);
+
+	delete_message(ans);
+	printf("Successfully logged-in as %s.\n", username);
+
+	return true;
+}
+
+static void print_player_list()
+{
+#define _STRINGIZE(a) #a
+#define STRINGIZE(a) _STRINGIZE(a)
+
+	struct req_who req;
+	struct ans_who *ans;
+	int i, count;
+
+	req.header.type = REQ_WHO;
+	req.header.length = MSG_BODY_SIZE(struct req_who);
+
+	if (!write_message(server_sock, (struct message *)&req)) {
+		print_error("Error sending REQ_WHO message.", 0);
+		return;
+	}
+
+	if (!read_message(server_sock, (struct message **)&ans)) {
+		print_error("Error reading message ANS_WHO from server.", 0);
+		return;
+	}
+
+	assert((ans->header.length % sizeof(struct who_player)) == 0);
+	count = ans->header.length / sizeof(struct who_player);
+
+	if (count == 0) {
+		puts("There are no connected players.");
+		return;
+	}
+
+	printf("\n%-" STRINGIZE(MAX_USERNAME_LENGTH) "s\t"
+			"%" STRINGIZE(WHO_STATUS_LENGTH) "s\n\n",
+			"USERNAME", "STATUS");
+	for (i = 0; i < count; i++) {
+		char status[WHO_STATUS_BUFFER_SIZE];
+
+		switch (ans->player[i].status) {
+		case PLAYER_AWAITING_REPLY:
+			fputs(COLOR_PLAYER_AWAITING, stdout);
+			snprintf(status, WHO_STATUS_BUFFER_SIZE,
+					"AWAITING REPLY (%s)",
+					ans->player[i].opponent);
+			break;
+		case PLAYER_IN_GAME:
+			fputs(COLOR_PLAYER_IN_GAME, stdout);
+			snprintf(status, WHO_STATUS_BUFFER_SIZE,
+					"IN GAME (%s)",
+					ans->player[i].opponent);
+			break;
+		case PLAYER_IDLE:
+		default:
+			fputs(COLOR_PLAYER_IDLE, stdout);
+			strcpy(status, "IDLE");
+		}
+
+		printf("%-" STRINGIZE(MAX_USERNAME_LENGTH) "s\t%"
+				STRINGIZE(WHO_STATUS_LENGTH) "s\n",
+				ans->player[i].username, status);
+
+		fputs(COLOR_RESET, stdout);
+	}
+}
+
+static void send_play_request(const char *username)
+{
+}
+
+static void process_std_command(const char *cmd, const char *args)
+{
+	if (strcasecmp(cmd, "!help") == 0) {
+		show_help();
+	} else if (strcasecmp(cmd, "!who") == 0) {
+		print_player_list();
+	} else if (strcasecmp(cmd, "!connect") == 0) {
+		if (args == NULL || !valid_username(args))
+			print_error("!connect requires a valid opponent name as argument.",
+					0);
+		else
+			send_play_request(args);
+	} else if (strcasecmp(cmd, "!quit") == 0) {
+		puts("Disconnecting... Bye!");
+		close(game_sock);
+		close(server_sock);
+		exit(EXIT_SUCCESS);
+	} else {
+		printf_error("Invalid command %s.", cmd);
+	}
+}
+
+static void process_game_command(const char *cmd, const char *args)
+{
+}
+
+static void process_command()
+{
+	char buffer[COMMAND_BUFFER_SIZE];
+	char *cmd;
+	char *args;
+	int len;
+
+	len = get_line(buffer, COMMAND_BUFFER_SIZE);
+	if (len > COMMAND_BUFFER_SIZE - 1) {
+		print_error("Too long input.", 0);
+		return;
+	}
+
+	cmd = trim_white_spaces(buffer);
+	if (*cmd != '!') {
+		printf_error("Invalid command %s.", cmd);
+		return;
+	}
+
+	args = split_cmd_args(cmd);
+	if (args && *args == '\0')
+		args = NULL;
+
+	if (in_game)
+		process_game_command(cmd, args);
+	else
+		process_std_command(cmd, args);
+}
+
+static bool get_server_message()
+{
+	return true;
+}
+
+static bool get_opponent_message()
+{
+	return true;
+}
+
+static void wait_for_input()
+{
+	fd_set readfds, _readfds;
+	int nfds;
+
+	FD_ZERO(&readfds);
+	FD_SET(fileno(stdin), &readfds);
+	FD_SET(server_sock, &readfds);
+	FD_SET(game_sock, &readfds);
+	nfds = (game_sock > server_sock) ? game_sock : server_sock;
+
+	in_game = false;
+
+	for (;;) {
+		int fd, ready;
+
+		putchar('\n');
+		if (in_game)
+			putchar('#');
+		else
+			putchar('>');
+		putchar(' ');
+		fflush(stdout);
+
+		_readfds = readfds;
+
+		errno = 0;
+		ready = select(nfds + 1, &_readfds, NULL, NULL, NULL);
+
+		if (ready == -1 && errno == EINTR) {
+			continue;
+		} else if (ready == -1) {
+			print_error("\nselect", errno);
+			break;
+		}
+
+		for (fd = 0; fd <= nfds; fd++) {
+			if (!FD_ISSET(fd, &_readfds))
+				continue;
+
+			if (fd == fileno(stdin)) {
+				process_command();
+				continue;
+			}
+
+			if (fd == server_sock) {
+				if (!bytes_available(fd)) {
+					printf("\nThe server has closed the connection.\n");
+					return;
+				}
+
+				if (!get_server_message()) {
+					print_error("\nget_server_message: error. Closing connection.",
+							0);
+					close(game_sock);
+					close(server_sock);
+					exit(EXIT_FAILURE);
+				}
+				continue;
+			}
+
+			if (fd == game_sock) {
+				if (!in_game) {
+					print_error("\nReceived data on UDP socket when not in game.",
+							0);
+					continue;
+				}
+
+				if (!get_opponent_message()) {
+					print_error("\nget_opponent_message: error. Closing connection.",
+							0);
+					close(game_sock);
+					close(server_sock);
+					exit(EXIT_FAILURE);
+				}
+			}
+		}
+	}
 }
 
 int main(int argc, char **argv)
 {
-	struct addrinfo hints;
-	int sfd;
+	uint16_t port;
+	char ipstr[ADDRESS_STRING_LENGTH];
+#if ADDRESS_FAMILY == AF_INET6
+	struct in6_addr addr;
+#else
+	struct in_addr addr;
+#endif
 
-	if (argc != 3) {
-		printf("Usage: %s <host> <port>\n", argv[0]);
+	if (argc > 3 || argc == 2) {
+		printf("Usage: %s <address> <port>\n", argv[0]);
 		exit(EXIT_SUCCESS);
 	}
+	if (argc < 2) {
+		if (inet_pton(ADDRESS_FAMILY, DEFAULT_SERVER_ADDRESS,
+					&addr) != 1) {
+			print_error("Invalid address DEFAULT_SERVER_ADDRESS",
+					0);
+			exit(EXIT_FAILURE);
+		}
+		port = DEFAULT_SERVER_PORT;
+	} else {
+		if (inet_pton(ADDRESS_FAMILY, argv[1], &addr) != 1) {
+			print_error("Invalid address", 0);
+			exit(EXIT_FAILURE);
+		}
+		port = string_to_uint16(argv[2]);
+		if (port == 0) {
+			print_error("Invalid port. Enter a value between 1 and 65535\n",
+					0);
+			exit(EXIT_FAILURE);
+		}
+	}
 
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_NUMERICSERV | AI_V4MAPPED | AI_ADDRCONFIG;
+	server_sock = connect_to_server(addr, htons(port));
+	if (server_sock == -1) {
+		print_error("Could not connect to server", 0);
+		exit(EXIT_FAILURE);
+	}
 
-	sfd = connect_to_server(hints, argv[1], argv[2]);
-	if (!sfd) {
-		print_error("Could not connect to server");
+	if (!get_peer_address(server_sock, ipstr, ADDRESS_STRING_LENGTH,
+				&port)) {
+		close(server_sock);
+		exit(EXIT_FAILURE);
+	}
+
+	printf("Successfully connected to server %s:%d (socket: %d)\n",
+			ipstr, port, server_sock);
+
+	if (!do_login()) {
+		close(game_sock);
+		close(server_sock);
 		exit(EXIT_FAILURE);
 	}
 
 	show_help();
 
-	login();
+	wait_for_input();
 
-	close(sfd);
+	puts("\nExiting...");
+	close(game_sock);
+	close(server_sock);
 	exit(EXIT_SUCCESS);
-
-exit_free_sock:
-	close(sfd);
-	exit(EXIT_FAILURE);
-	return EXIT_FAILURE;
 }
