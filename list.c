@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include "console.h"
 #include "list.h"
 
@@ -15,7 +16,7 @@ static int compare_keys(enum key_type type, void *key1, void *key2)
 {
 	switch (type) {
 	case TP_STR:
-		return strcmp((char *)key1, (char *)key2);
+		return strcasecmp((char *)key1, (char *)key2);
 	case TP_INT:
 	default:
 		return *(int *)key1 - *(int *)key2;

@@ -6,7 +6,7 @@
 #include "console.h"
 #include "game_client.h"
 
-#if ADDRESS_FAMILY == AF_INET6
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 struct game_client *create_client(const char *username, in_port_t in_port,
 		struct in6_addr in_addr, int sock)
 #else

@@ -16,7 +16,8 @@ enum __attribute__ ((packed)) msg_type {
 	REQ_WHO		= 0x01,
 	ANS_WHO		= 0xF1,
 	REQ_PLAY	= 0x02,
-	ANS_PLAY	= 0xF2,
+	ANS_PLAY_REQ	= 0xF2,
+	ANS_PLAY	= 0xF3,
 	ANS_BADREQ	= 0xFF
 	};
 
@@ -35,6 +36,7 @@ enum __attribute__ ((packed)) player_status {
 enum __attribute__ ((packed)) play_response {
 	PLAY_DECLINE,
 	PLAY_ACCEPT,
+	PLAY_INVALID_OPPONENT,
 	PLAY_TIMEDOUT
 };
 
@@ -86,15 +88,24 @@ struct __attribute__ ((packed)) ans_who {
 
 struct __attribute__ ((packed)) req_play {
 	struct msg_header header;
-	char player_username[MAX_USERNAME_SIZE];
+	char opponent_username[MAX_USERNAME_SIZE];
+};
+
+struct __attribute__ ((packed)) ans_play_req {
+	struct msg_header header;
+	bool __attribute__ ((packed)) accept;
 };
 
 struct __attribute__ ((packed)) ans_play {
 	struct msg_header header;
 	enum play_response response;
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESS == 1
+	struct in6_addr address;
+#else
+	struct in_addr address;
+#endif
+	in_port_t udp_port;
 };
-
-/* add msg_client_info struct that sends [username], port, addr */
 
 struct __attribute__ ((packed)) msg_ready {
 	struct msg_header header;

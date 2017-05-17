@@ -43,6 +43,7 @@ static bool valid_message(struct message *msg)
 	case REQ_WHO:
 	case ANS_WHO:
 	case REQ_PLAY:
+	case ANS_PLAY_REQ:
 	case ANS_PLAY:
 	case ANS_BADREQ:
 		return msg->header.magic[0] == 'B' &&

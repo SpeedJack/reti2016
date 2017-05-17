@@ -30,6 +30,29 @@ static inline void show_help()
 			"!quit --> disconnects and exits");
 }
 
+static bool ask_to_play(const char *username)
+{
+	char c;
+
+	do {
+		printf("\nPlayer %s invited you to play a match. Accept? [Y/n] ",
+				username);
+		c = get_character();
+
+		switch (c) {
+		case 'y':
+		case 'Y':
+		case '\n':
+			return true;
+		case 'n':
+		case 'N':
+			return false;
+		default:
+			puts("Invalid answer.");
+		}
+	} while (1);
+}
+
 static int ask_username(char *username)
 {
 	int len;
@@ -94,7 +117,8 @@ static bool do_login()
 			return false;
 		}
 
-		if (!read_message(server_sock, &ans)) {
+		if (!read_message(server_sock, &ans) ||
+				ans->header.type != ANS_LOGIN) {
 			print_error("Error reading message ANS_LOGIN from server.",
 					0);
 			delete_message(ans);
@@ -147,8 +171,10 @@ static void print_player_list()
 		return;
 	}
 
-	if (!read_message(server_sock, (struct message **)&ans)) {
+	if (!read_message(server_sock, (struct message **)&ans) ||
+			ans->header.type != ANS_WHO) {
 		print_error("Error reading message ANS_WHO from server.", 0);
+		delete_message((struct message *)ans);
 		return;
 	}
 
@@ -157,6 +183,7 @@ static void print_player_list()
 
 	if (count == 0) {
 		puts("There are no connected players.");
+		delete_message((struct message *)ans);
 		return;
 	}
 
@@ -191,10 +218,67 @@ static void print_player_list()
 
 		fputs(COLOR_RESET, stdout);
 	}
+
+	delete_message((struct message *)ans);
+}
+
+static void process_play_request(struct req_play *msg)
+{
+	struct ans_play_req ans;
+
+	ans.header.type = ANS_PLAY_REQ;
+	ans.header.length = MSG_BODY_SIZE(struct ans_play_req);
+
+	in_game = ans.accept = ask_to_play(msg->opponent_username);
+
+	if (!write_message(server_sock, (struct message *)&ans)) {
+		print_error("Error sending ANS_PLAY_REQ message.", 0);
+		in_game = false;
+	}
 }
 
 static void send_play_request(const char *username)
 {
+	struct req_play req;
+	struct ans_play *ans;
+
+	req.header.type = REQ_PLAY;
+	req.header.length = MSG_BODY_SIZE(struct req_play);
+
+	strncpy(req.opponent_username, username, MAX_USERNAME_SIZE);
+
+	if (!write_message(server_sock, (struct message *)&req)) {
+		print_error("Error sending REQ_PLAY message.", 0);
+		return;
+	}
+
+	if (!read_message(server_sock, (struct message **)&ans) ||
+			ans->header.type != ANS_PLAY) {
+		print_error("Error reading message ANS_PLAY from server.", 0);
+		delete_message((struct message *)ans);
+		return;
+	}
+
+	switch (ans->response) {
+	case PLAY_DECLINE:
+		printf("%s declined the invite to play.\n", username);
+		break;
+	case PLAY_ACCEPT:
+		printf("%s accepted the invite to play!\n", username);
+		in_game = true;
+		break;
+	case PLAY_INVALID_OPPONENT:
+		printf("Player %s not found.\n", username);
+		break;
+	case PLAY_TIMEDOUT:
+		printf("Player %s is currently AFK. Request timed out.\n",
+				username);
+		break;
+	default:
+		print_error("Invalid response from server.", 0);
+	}
+
+	delete_message((struct message *)ans);
 }
 
 static void process_std_command(const char *cmd, const char *args)
@@ -221,6 +305,25 @@ static void process_std_command(const char *cmd, const char *args)
 
 static void process_game_command(const char *cmd, const char *args)
 {
+	/* dummy */
+	if (strcasecmp(cmd, "!help") == 0) {
+		show_help();
+	} else if (strcasecmp(cmd, "!shot") == 0) {
+		if (args == NULL || false /* invalid square */)
+			print_error("!shot requires a valid game table square as argument.",
+					0);
+		else
+			{;} /* shot */
+	} else if (strcasecmp(cmd, "!show") == 0) {
+		; /* show */
+	} else if (strcasecmp(cmd, "!disconnect") == 0) {
+		close(game_sock);
+		; /* send MSG_ENDGAME */
+		puts("Disconnected from game: YOU GAVE UP!");
+		in_game = false;
+	} else {
+		printf_error("Invalid command %s.", cmd);
+	}
 }
 
 static void process_command()
@@ -254,7 +357,21 @@ static void process_command()
 
 static bool get_server_message()
 {
-	return true;
+	struct message *msg;
+
+	if (!read_message(server_sock, &msg)) {
+		print_error("get_server_message: error reading message from server.", 0);
+		return false;
+	}
+
+	if (msg->header.type == REQ_PLAY) {
+		process_play_request((struct req_play *)msg);
+		return true;
+	}
+
+	print_error("Received an invalid message from server.", 0);
+	delete_message(msg);
+	return false;
 }
 
 static bool get_opponent_message()
@@ -346,7 +463,7 @@ int main(int argc, char **argv)
 {
 	uint16_t port;
 	char ipstr[ADDRESS_STRING_LENGTH];
-#if ADDRESS_FAMILY == AF_INET6
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 	struct in6_addr addr;
 #else
 	struct in_addr addr;

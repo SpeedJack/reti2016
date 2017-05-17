@@ -52,6 +52,17 @@ bool get_uint16(uint16_t *result)
 	return *result != 0;
 }
 
+char get_character()
+{
+	char ch;
+
+	do {
+		ch = getchar();
+	} while (isspace(ch));
+
+	return ch;
+}
+
 char *trim_white_spaces(char *str)
 {
 	char *end;
@@ -77,22 +88,6 @@ char *split_cmd_args(char *cmd)
 
 	return trim_white_spaces(cmd + 1);
 }
-
-/*bool start_case_with(const char *str, const char *prefix)
-{
-	size_t lenprefix, lenstr;
-
-	lenprefix = strlen(prefix);
-	lenstr = strlen(str);
-
-	if (lenstr < lenprefix)
-		return false;
-
-	if (strncasecmp(prefix, str, lenprefix) == 0)
-		return true;
-
-	return false;
-}*/
 
 void print_error(const char *errstr, int errnum)
 {

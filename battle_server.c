@@ -21,22 +21,35 @@
 
 static void send_badreq(struct game_client *client)
 {
+	struct ans_badreq badreq;
+
+	badreq.header.type = ANS_BADREQ;
+	badreq.header.length = MSG_BODY_SIZE(struct ans_badreq);
+
+	printf("Sending ANS_BADREQ (length=%d) on socket %d\n",
+			badreq.header.length, client->sock);
+
+	if (!write_message(client->sock, (struct message *)&badreq))
+		print_error("Error sending ANS_BADREQ message", 0);
+
 }
 
 static void send_play_request_timeout(struct match *m)
 {
 	struct ans_play ans;
 
+	memset(&ans, 0, sizeof(struct ans_play));
 	ans.header.type = ANS_PLAY;
 	ans.header.length = MSG_BODY_SIZE(struct ans_play);
 
+	ans.response = PLAY_TIMEDOUT;
 	printf("Sending ANS_PLAY (length=%d) with response=%d to %s (socket: %d) and %s (socket: %d)\n",
 			ans.header.length, ans.response,
 			m->player1->username, m->player1->sock,
 			m->player2->username, m->player2->sock);
 	if (!write_message(m->player2->sock, (struct message *)&ans) ||
 			!write_message(m->player1->sock, (struct message *)&ans))
-		print_error("Error sending message", 0);
+		print_error("Error sending ANS_PLAY message", 0);
 }
 
 static void remove_elapsed_matches()
@@ -52,14 +65,79 @@ static void remove_elapsed_matches()
 		}
 }
 
-static void process_play_answer(struct game_client *client,
-		struct ans_play *msg)
+static void process_play_req_answer(struct game_client *client,
+		struct ans_play_req *msg)
 {
+	struct ans_play ans;
+
+	assert(client != client->match->player1);
+
+	memset(&ans, 0, sizeof(struct ans_play));
+	ans.header.type = ANS_PLAY;
+	ans.header.length = MSG_BODY_SIZE(struct ans_play);
+
+	if (msg->accept) {
+		ans.response = PLAY_ACCEPT;
+		ans.address = client->address;
+		ans.udp_port = client->port;
+		client->match->awaiting_reply = false;
+	} else {
+		ans.response = PLAY_DECLINE;
+		delete_match(client->match);
+	}
+
+	printf("Sending ANS_PLAY (length=%d) with response=%d to %s (socket: %d)\n",
+			ans.header.length, ans.response,
+			client->match->player1->username,
+			client->match->player1->sock);
+
+	if (!write_message(client->match->player1->sock,
+				(struct message *)&ans))
+		print_error("Error sending ANS_PLAY message", 0);
 }
 
 static void process_play_request(struct game_client *client,
 		struct req_play *msg)
 {
+	struct game_client *opponent;
+	struct req_play req_forward;
+
+	opponent = get_client_by_username(msg->opponent_username);
+
+	if (!opponent || opponent == client) {
+		struct ans_play ans;
+
+		memset(&ans, 0, sizeof(struct ans_play));
+		ans.header.type = ANS_PLAY;
+		ans.header.length = MSG_BODY_SIZE(struct ans_play);
+
+		ans.response = PLAY_INVALID_OPPONENT;
+
+		printf("Sending ANS_PLAY (length=%d) with response=%d to %s (socket: %d)\n",
+				ans.header.length, ans.response,
+				client->username, client->sock);
+
+		if (!write_message(client->sock, (struct message *)&ans))
+			print_error("Error sending ANS_PLAY message", 0);
+
+		return;
+	}
+
+	add_match(client, opponent);
+
+	req_forward.header.type = REQ_PLAY;
+	req_forward.header.length = MSG_BODY_SIZE(struct req_play);
+
+	strncpy(req_forward.opponent_username, client->username,
+			MAX_USERNAME_SIZE);
+
+	printf("Sending REQ_PLAY (length=%d) with opponent_username=%s to %s (socket: %d)\n",
+			req_forward.header.length,
+			req_forward.opponent_username,
+			opponent->username, opponent->sock);
+
+	if (!write_message(opponent->sock, (struct message *)&req_forward))
+		print_error("Error sending REQ_PLAY message", 0);
 }
 
 static void send_client_list(struct game_client *client)
@@ -109,7 +187,7 @@ static void send_client_list(struct game_client *client)
 
 	ans = (struct ans_who *)create_message(mh, data);
 	if (!write_message(client->sock, (struct message *)ans))
-		print_error("Error sending message", 0);
+		print_error("Error sending ANS_WHO message", 0);
 	delete_message((struct message *)ans);
 	free(data);
 }
@@ -141,7 +219,7 @@ static void do_login(struct game_client *client, struct req_login *msg)
 			client->username, client->sock);
 
 	if (!write_message(client->sock, (struct message *)&ans))
-		print_error("Error sending message", 0);
+		print_error("Error sending ANS_LOGIN message", 0);
 }
 
 static bool dispatch_message(struct game_client *client)
@@ -167,11 +245,12 @@ static bool dispatch_message(struct game_client *client)
 					client->sock);
 			process_play_request(client, (struct req_play *)msg);
 			break;
-		case ANS_PLAY:
-			printf("Received ANS_PLAY (length=%d) from %s on socket %d\n",
+		case ANS_PLAY_REQ:
+			printf("Received ANS_PLAY_REQ (length=%d) from %s on socket %d\n",
 					msg->header.length, client->username,
 					client->sock);
-			process_play_answer(client, (struct ans_play *)msg);
+			process_play_req_answer(client,
+					(struct ans_play_req *)msg);
 			break;
 		case MSG_ENDGAME:
 			printf("Received MSG_ENDGAME (length=%d) from %s on socket %d\n",
@@ -225,7 +304,7 @@ static int accept_connection(int sockfd)
 	if (-1 == (connfd = accept_socket_connection(sockfd, &addr)))
 		return -1;
 
-#if ADDRESS_FAMILY == AF_INET6
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 	client = create_client(NULL, 0,
 			((struct sockaddr_in6 *)&addr)->sin6_addr, connfd);
 #else
@@ -318,8 +397,10 @@ static void go_server(int sfd)
 		FD_CLR(fd, &readfds);\
 		remove_client(*client);\
 		delete_client(client);\
-		nfds = get_max_fd();\
-		nfds = (sfd > nfds) ? sfd : nfds;\
+		if (fd >= nfds) {\
+			nfds = get_max_fd();\
+			nfds = (sfd > nfds) ? sfd : nfds;\
+		}\
 	} while(0)
 
 			if (!bytes_available(fd)) {

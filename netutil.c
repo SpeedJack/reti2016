@@ -28,7 +28,7 @@ int listen_on_port(in_port_t port)
 
 	memset(&sa, 0, sizeof(struct sockaddr_storage));
 	sa.ss_family = ADDRESS_FAMILY;
-#if ADDRESS_FAMILY == AF_INET6
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 	((struct sockaddr_in6 *)&sa)->sin6_port = port;
 #else
 	((struct sockaddr_in *)&sa)->sin_port = port;
@@ -86,7 +86,7 @@ int open_local_port(in_port_t port)
 
 	memset(&sa, 0, sizeof(struct sockaddr_storage));
 	sa.ss_family = ADDRESS_FAMILY;
-#if ADDRESS_FAMILY == AF_INET6
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 	((struct sockaddr_in6 *)&sa)->sin6_port = port;
 	((struct sockaddr_in6 *)&sa)->sin6_addr = in6addr_any;
 #else
@@ -178,7 +178,7 @@ bool get_peer_address(int sockfd, char *ipstr, socklen_t size, in_port_t *port)
 	return false;
 }
 
-#if ADDRESS_FAMILY == AF_INET6
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 bool get_network_address(const char *src, struct in6_addr *dst)
 #else
 bool get_network_address(const char *src, struct in_addr *dst)
@@ -191,7 +191,7 @@ bool get_network_address(const char *src, struct in_addr *dst)
 	return true;
 }
 
-#if ADDRESS_FAMILY == AF_INET6
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 int connect_to_server(struct in6_addr addr, in_port_t port)
 #else
 int connect_to_server(struct in_addr addr, in_port_t port)
@@ -202,7 +202,7 @@ int connect_to_server(struct in_addr addr, in_port_t port)
 
 	memset(&sa, 0, sizeof(struct sockaddr_storage));
 	sa.ss_family = ADDRESS_FAMILY;
-#if ADDRESS_FAMILY == AF_INET6
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 	((struct sockaddr_in6 *)&sa)->sin6_addr = addr;
 	((struct sockaddr_in6 *)&sa)->sin6_port = port;
 #else
