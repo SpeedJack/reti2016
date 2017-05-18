@@ -2,7 +2,6 @@
 #define	_BATTLE_CONSOLE_H
 
 #include <stdint.h>
-#include "bool.h"
 
 uint16_t string_to_uint16(const char *str);
 int get_line(char *buffer, size_t size);

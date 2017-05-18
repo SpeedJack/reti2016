@@ -1,6 +1,3 @@
-#ifndef	_BATTLE_CONFIG_H
-#define	_BATTLE_CONFIG_H
-
 #define	USE_IPV6_ADDRESSING	0
 
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
@@ -51,5 +48,3 @@
 
 #define	SELECT_TIMEOUT_SECONDS	3
 #define	PLAY_REQUEST_TIMEOUT	60
-
-#endif

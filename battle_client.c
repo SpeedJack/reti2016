@@ -11,7 +11,6 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include "bool.h"
 #include "console.h"
 #include "game_client.h"
 #include "netutil.h"
@@ -224,15 +223,15 @@ static void print_player_list()
 
 static void process_play_request(struct req_play *msg)
 {
-	struct ans_play_req ans;
+	struct req_play_ans ans;
 
-	ans.header.type = ANS_PLAY_REQ;
-	ans.header.length = MSG_BODY_SIZE(struct ans_play_req);
+	ans.header.type = REQ_PLAY_ANS;
+	ans.header.length = MSG_BODY_SIZE(struct req_play_ans);
 
 	in_game = ans.accept = ask_to_play(msg->opponent_username);
 
 	if (!write_message(server_sock, (struct message *)&ans)) {
-		print_error("Error sending ANS_PLAY_REQ message.", 0);
+		print_error("Error sending REQ_PLAY_ANS message.", 0);
 		in_game = false;
 	}
 }

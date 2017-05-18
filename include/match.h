@@ -2,7 +2,6 @@
 #define	_BATTLE_MATCH_H
 
 #include <time.h>
-#include "bool.h"
 #include "game_client.h"
 
 struct match {

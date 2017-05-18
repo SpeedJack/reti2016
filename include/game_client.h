@@ -2,7 +2,6 @@
 #define	_BATTLE_GAME_CLIENT_H
 
 #include <netinet/in.h>
-#include "bool.h"
 #include "match.h"
 
 struct game_client {
