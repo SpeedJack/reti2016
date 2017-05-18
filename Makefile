@@ -15,13 +15,21 @@ COBJs = $(COMMONOBJs) proto.o battle_client.o
 SOBJs = $(COMMONOBJs) server_proto.o list.o hashtable.o client_list.o battle_server.o
 OBJs = $(COBJs) $(SOBJs)
 
+
 .PHONY: all clean
 .PRECIOUS: $(DEPDIR)/%.d
+
 
 %.o: %.c
 %.o: %.c $(DEPDIR)/%.d
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
+
+server_proto.o: CFLAGS += -DBATTLE_SERVER
+server_proto.o: proto.c $(DEPDIR)/%.d
+	$(COMPILE.c) $(OUTPUT_OPTION) $<
+	$(POSTCOMPILE)
+
 
 all: $(EXEs)
 
@@ -29,13 +37,9 @@ battle_client: $(COBJs)
 
 battle_server: $(SOBJs)
 
-server_proto.o: CFLAGS += -DBATTLE_SERVER
-server_proto.o: proto.c $(DEPDIR)/%.d
-	$(COMPILE.c) $(OUTPUT_OPTION) $<
-	$(POSTCOMPILE)
-
 clean:
 	-rm -f $(DEPDIR)/*.d $(OBJs) $(EXEs)
+
 
 $(DEPDIR)/%.d: ;
 
