@@ -30,8 +30,9 @@ battle_client: $(COBJs)
 battle_server: $(SOBJs)
 
 server_proto.o: CFLAGS += -DBATTLE_SERVER
-server_proto.o: proto.c
+server_proto.o: proto.c $(DEPDIR)/%.d
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
+	$(POSTCOMPILE)
 
 clean:
 	-rm -f $(DEPDIR)/*.d $(OBJs) $(EXEs)
