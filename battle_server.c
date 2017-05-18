@@ -211,8 +211,11 @@ static inline void disconnect_client(struct game_client *client)
 			client->match->player2->sock :
 			client->match->player1->sock;
 
-		send_ans_play(sockfd, PLAY_DECLINE,
-				client->address, client->port);
+		if (client->match->awaiting_reply)
+			send_ans_play(sockfd, PLAY_DECLINE,
+					client->address, client->port);
+		else
+			send_msg_endgame(sockfd, true);
 	}
 
 	remove_client(client);
