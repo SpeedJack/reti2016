@@ -25,10 +25,6 @@ OBJs = $(COBJs) $(SOBJs)
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
 
-server_proto.o: CFLAGS += -DBATTLE_SERVER
-server_proto.o: proto.c $(DEPDIR)/%.d
-	$(COMPILE.c) $(OUTPUT_OPTION) $<
-	$(POSTCOMPILE)
 
 
 all: $(EXEs)
@@ -39,6 +35,12 @@ battle_server: $(SOBJs)
 
 clean:
 	-rm -f $(DEPDIR)/*.d $(OBJs) $(EXEs)
+
+
+server_proto.o: CFLAGS += -DBATTLE_SERVER
+server_proto.o: proto.c $(DEPDIR)/%.d
+	$(COMPILE.c) $(OUTPUT_OPTION) $<
+	$(POSTCOMPILE)
 
 
 $(DEPDIR)/%.d: ;
