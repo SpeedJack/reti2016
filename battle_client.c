@@ -122,7 +122,7 @@ static in_port_t ask_port()
 	in_port_t net_port;
 
 	do {
-		printf("Insert your UDP port for incoming connections (number in range %d-%d): ",
+		printf("Insert your UDP port (number in range %d-%d): ",
 				MIN_UDP_PORT_NUMBER, MAX_UDP_PORT_NUMBER);
 		fflush(stdout);
 #pragma GCC diagnostic push
@@ -564,9 +564,6 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (!sighandler_init())
-		exit(EXIT_FAILURE);
-
 	server_sock = connect_to_server(addr, htons(port));
 	if (server_sock == -1) {
 		print_error("Could not connect to server", 0);
@@ -582,14 +579,13 @@ int main(int argc, char **argv)
 	printf("Successfully connected to server %s:%d (socket: %d)\n",
 			ipstr, port, server_sock);
 
-	if (!do_login()) {
+	if (!do_login() || !sighandler_init()) {
 		close(game_sock);
 		close(server_sock);
 		exit(EXIT_FAILURE);
 	}
 
 	show_help();
-	putchar('\n');
 
 	wait_for_input();
 
