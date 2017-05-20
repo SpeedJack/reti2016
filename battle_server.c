@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <errno.h>
-#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -17,6 +16,13 @@
 #include "match.h"
 #include "netutil.h"
 #include "proto.h"
+#include "sighandler.h"
+
+static inline void close_range(int start, int stop)
+{
+	for (; start <= stop; start++)
+		close(start);
+}
 
 static void remove_elapsed_matches()
 {
@@ -36,20 +42,41 @@ static void remove_elapsed_matches()
 		}
 }
 
+static void terminate_match(struct game_client *client, bool disconnected)
+{
+	int sockfd;
+
+	if (!client->match)
+		return;
+
+	sockfd = (client == client->match->player1) ?
+		client->match->player2->sock : client->match->player1->sock;
+
+	if (client->match->awaiting_reply)
+		send_ans_play(sockfd, PLAY_DECLINE,
+				client->address, client->port);
+	else
+		send_msg_endgame(sockfd, disconnected);
+
+	delete_match(client->match);
+}
+
 static void process_play_req_answer(struct game_client *client,
 		struct req_play_ans *msg)
 {
 	enum play_response res;
 
-	if (!client->match)
+	if (!client->match || client == client->match->player1)
 		return;
-
-	assert(client != client->match->player1);
 
 	res = msg->accept ? PLAY_ACCEPT : PLAY_DECLINE;
 
-	send_ans_play(client->match->player1->sock, res, client->address,
-			client->port);
+	send_ans_play(client->match->player1->sock, res,
+			client->match->player2->address,
+			client->match->player2->port);
+	send_ans_play(client->match->player2->sock, res,
+			client->match->player1->address,
+			client->match->player1->port);
 
 	client->match->awaiting_reply = false;
 	if (!msg->accept)
@@ -65,6 +92,11 @@ static void process_play_request(struct game_client *client,
 
 	if (!opponent || opponent == client) {
 		send_ans_play(client->sock, PLAY_INVALID_OPPONENT,
+				client->address, client->port);
+		return;
+	}
+	if (opponent->match) {
+		send_ans_play(client->sock, PLAY_OPPONENT_IN_GAME,
 				client->address, client->port);
 		return;
 	}
@@ -149,7 +181,10 @@ static bool dispatch_message(struct game_client *client)
 	if (!msg)
 		return false;
 
-	switch(msg->header.type) {
+	switch (msg->header.type) {
+	case REQ_LOGIN:
+		do_login(client, (struct req_login *)msg);
+		break;
 	case REQ_WHO:
 		send_client_list(client);
 		break;
@@ -161,11 +196,8 @@ static bool dispatch_message(struct game_client *client)
 				(struct req_play_ans *)msg);
 		break;
 	case MSG_ENDGAME:
-		/* TODO: send msg_endgame to opponent */
-		delete_match(client->match);
-		break;
-	case REQ_LOGIN:
-		do_login(client, (struct req_login *)msg);
+		terminate_match(client,
+				((struct msg_endgame *)msg)->disconnected);
 		break;
 	default:
 		send_ans_badreq(client->sock);
@@ -178,7 +210,6 @@ static bool dispatch_message(struct game_client *client)
 static int accept_connection(int sockfd)
 {
 	int connfd;
-	struct game_client *client;
 	struct sockaddr_storage addr;
 	char ipstr[ADDRESS_STRING_LENGTH];
 	in_port_t port;
@@ -187,13 +218,10 @@ static int accept_connection(int sockfd)
 		return -1;
 
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
-	client = create_client(NULL, 0,
-			((struct sockaddr_in6 *)&addr)->sin6_addr, connfd);
+	add_client(((struct sockaddr_in6 *)&addr)->sin6_addr, connfd);
 #else
-	client = create_client(NULL, 0,
-			((struct sockaddr_in *)&addr)->sin_addr, connfd);
+	add_client(((struct sockaddr_in *)&addr)->sin_addr, connfd);
 #endif
-	add_client(client);
 
 	if (get_peer_address(connfd, ipstr, ADDRESS_STRING_LENGTH, &port))
 		printf("Incoming connection from %s:%d (socket: %d)\n",
@@ -202,42 +230,10 @@ static int accept_connection(int sockfd)
 	return connfd;
 }
 
-static inline void disconnect_client(struct game_client *client)
-{
-	int sockfd;
-
-	if (client->match) {
-		sockfd = (client == client->match->player1) ?
-			client->match->player2->sock :
-			client->match->player1->sock;
-
-		if (client->match->awaiting_reply)
-			send_ans_play(sockfd, PLAY_DECLINE,
-					client->address, client->port);
-		else
-			send_msg_endgame(sockfd, true);
-	}
-
-	remove_client(client);
-	delete_client(client);
-}
-
-static void dummy_handler(int signum)
-{
-	printf("\nReceived signal %d", signum);
-}
-
-static inline void close_range(int start, int stop)
-{
-	for (; start <= stop; start++)
-		close(start);
-}
-
 static void go_server(int sfd)
 {
 	fd_set readfds, _readfds;
 	int nfds;
-	struct sigaction action;
 	struct timeval timeout;
 
 	FD_ZERO(&readfds);
@@ -246,14 +242,14 @@ static void go_server(int sfd)
 
 	client_list_init();
 
-	memset(&action, 0, sizeof(struct sigaction));
-	action.sa_handler = dummy_handler;
-	sigaction(SIGHUP, &action, NULL);
-	sigaction(SIGINT, &action, NULL);
-	sigaction(SIGTERM, &action, NULL);
-
 	for (;;) {
 		int fd, ready;
+
+		if (received_signal > 0) {
+			client_list_destroy();
+			close_range(sfd + 1, nfds);
+			return;
+		}
 
 		_readfds = readfds;
 
@@ -297,7 +293,8 @@ static void go_server(int sfd)
 #define	CLOSE_CLIENT	do {\
 		close(fd);\
 		FD_CLR(fd, &readfds);\
-		disconnect_client(client);\
+		terminate_match(client, true);\
+		remove_client(client);\
 		if (fd >= nfds) {\
 			nfds = get_max_fd();\
 			nfds = (sfd > nfds) ? sfd : nfds;\
@@ -306,9 +303,9 @@ static void go_server(int sfd)
 
 			if (!bytes_available(fd)) {
 				if (logged_in(client))
-					printf("The remote host has closed the connection on socket %d (username: %s)\n",
-							client->sock,
-							client->username);
+					printf("Player %s has closed the connection on socket %d\n",
+							client->username,
+							client->sock);
 				else
 					printf("The remote host has closed the connection on socket %d\n",
 							client->sock);
@@ -343,13 +340,14 @@ int main(int argc, char **argv)
 	if (argc < 2)
 		port = DEFAULT_SERVER_PORT;
 	else
-		port = string_to_uint16(argv[1]);
-
-	if (port == 0) {
-		print_error("Invalid port. Enter a value between 1 and 65535\n",
+		if (!string_to_uint16(argv[1], &port) || port == 0) {
+			print_error("Invalid port. Enter a value between 1 and 65535\n",
 				0);
+			exit(EXIT_FAILURE);
+		}
+
+	if (!sighandler_init())
 		exit(EXIT_FAILURE);
-	}
 
 	sfd = listen_on_port(htons(port));
 	if (sfd < 0)

@@ -36,6 +36,7 @@ enum __attribute__ ((packed)) play_response {
 	PLAY_DECLINE,
 	PLAY_ACCEPT,
 	PLAY_INVALID_OPPONENT,
+	PLAY_OPPONENT_IN_GAME,
 	PLAY_TIMEDOUT
 };
 
@@ -133,7 +134,8 @@ struct __attribute__ ((packed)) ans_badreq {
 };
 
 struct message *read_message(int sockfd);
-void delete_message(struct message *msg);
+struct message *read_message_type(int sockfd, enum msg_type type);
+void delete_message(void *msg);
 const char *message_type_name(enum msg_type type);
 
 bool send_req_login(int sockfd, const char *username, in_port_t port);

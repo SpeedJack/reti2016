@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,10 +14,11 @@
 #include "game_client.h"
 #endif
 
-const char *msg_type_name[] = {"REQ_LOGIN", "ANS_LOGIN", "REQ_WHO", "ANS_WHO",
-				"REQ_PLAY", "REQ_PLAY_ANS", "ANS_PLAY",
-				"MSG_READY", "MSG_SHOT", "MSG_RESULT",
-				"MSG_ENDGAME", "", "", "", "", "ANS_BADREQ"};
+static const char *msg_type_name[] = {"REQ_LOGIN", "ANS_LOGIN", "REQ_WHO",
+				"ANS_WHO", "REQ_PLAY", "REQ_PLAY_ANS",
+				"ANS_PLAY", "MSG_READY", "MSG_SHOT",
+				"MSG_RESULT",	"MSG_ENDGAME", "", "", "", "",
+				"ANS_BADREQ"};
 
 #define	MSG_ZERO_FILL(m)	memset(((struct message *)&m)->body, 0,\
 				m.header.length);
@@ -38,7 +40,7 @@ const char *msg_type_name[] = {"REQ_LOGIN", "ANS_LOGIN", "REQ_WHO", "ANS_WHO",
 	return msg;
 }*/
 
-void delete_message(struct message *msg)
+void delete_message(void *msg)
 {
 	if (msg)
 		free(msg);
@@ -92,15 +94,15 @@ static void dump_message(struct message *msg, int sockfd, bool send)
 
 	client = get_client_by_socket(sockfd);
 
-	printf("%s %s (length=%u) {", send ? "Sending" : "Received",
+	printf("%s %s (length=%" PRIu32 ") {", send ? "Sending" : "Received",
 			message_type_name(msg->header.type),
 			msg->header.length);
 
 	switch (msg->header.type) {
 	case REQ_LOGIN:
-		printf("username=%s; udp_port=%hu",
+		printf("username=%s; udp_port=%" PRIu16,
 				((struct req_login *)msg)->username,
-				((struct req_login *)msg)->udp_port);
+				ntohs(((struct req_login *)msg)->udp_port));
 		break;
 	case ANS_LOGIN:
 		printf("response=%d", ((struct ans_login *)msg)->response);
@@ -120,9 +122,10 @@ static void dump_message(struct message *msg, int sockfd, bool send)
 	case ANS_PLAY:
 		inet_ntop(ADDRESS_FAMILY, &((struct ans_play *)msg)->address,
 				addrstr, ADDRESS_STRING_LENGTH);
-		printf("response=%d; address=%s; port=%hu",
+		printf("response=%d; address=%s; port=%" PRIu16,
 				((struct ans_play *)msg)->response,
-				addrstr, ((struct ans_play *)msg)->udp_port);
+				addrstr,
+				ntohs(((struct ans_play *)msg)->udp_port));
 		break;
 	case MSG_ENDGAME:
 		printf("disconnected=%s",
@@ -173,12 +176,34 @@ struct message *read_message(int sockfd) /* TODO: nonblocking */
 #ifdef	BATTLE_SERVER
 		dump_message(msg, sockfd, false);
 #endif
+		if (msg->header.type == ANS_BADREQ) {
+			printf_error("read_message: received ANS_BADREQ from socket %d",
+					sockfd);
+			return NULL;
+		}
 		return msg;
 	}
 
 	printf_error("read_message: error reading message %s from socket %d",
 			message_type_name(msg->header.type), sockfd);
 	return NULL;
+}
+
+struct message *read_message_type(int sockfd, enum msg_type type)
+{
+	struct message *msg;
+
+	msg = read_message(sockfd);
+
+	if (msg && msg->header.type != type) {
+		printf_error("read_message_type: received wrong message type from socket %d",
+				sockfd);
+		delete_message(msg);
+		return NULL;
+	}
+
+	return msg;
+
 }
 
 static bool write_message(int sockfd, struct message *msg)
@@ -240,7 +265,7 @@ bool send_req_who(int sockfd)
 	struct req_who msg;
 
 	msg.header.type = REQ_WHO;
-	msg.header.length = MSG_BODY_SIZE(struct req_login);
+	msg.header.length = MSG_BODY_SIZE(struct req_who);
 
 	return write_message(sockfd, (struct message *)&msg);
 }
@@ -320,6 +345,7 @@ bool send_ans_play(int sockfd, enum play_response response,
 	case PLAY_DECLINE:
 	case PLAY_INVALID_OPPONENT:
 	case PLAY_TIMEDOUT:
+	case PLAY_OPPONENT_IN_GAME:
 		msg.response = response;
 		break;
 	default:

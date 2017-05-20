@@ -3,8 +3,6 @@
 
 #include "list.h"
 
-#define	HASHTABLE_SIZE	16
-
 #define HASHTABLE_INIT(ht)	do {\
 		int __for_counter;\
 		for (__for_counter = 0; __for_counter < HASHTABLE_SIZE;\

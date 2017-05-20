@@ -9,8 +9,6 @@
 #include "console.h"
 #include "netutil.h"
 
-#define	LISTEN_BACKLOG	10
-
 int set_nonblocking_socket(int fd)
 {
 	int flags;

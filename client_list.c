@@ -7,7 +7,7 @@
 #include "list.h"
 #include "match.h"
 
-static struct list_head *client_list = NULL;
+static struct list_head *client_list = NULL; /* TODO: use a btree instead? */
 static struct list_head client_hashtable[HASHTABLE_SIZE];
 static unsigned int logged_count;
 
@@ -28,7 +28,7 @@ void client_list_init()
 	HASHTABLE_INIT(client_hashtable);
 }
 
-struct game_client *remove_client(struct game_client *client)
+void remove_client(struct game_client *client)
 {
 	if (client->match)
 		delete_match(client->match);
@@ -38,12 +38,19 @@ struct game_client *remove_client(struct game_client *client)
 		logged_count--;
 	}
 
-	return (struct game_client *)
-			hashtable_remove(client_hashtable, client->sock);
+	hashtable_remove(client_hashtable, client->sock);
+	delete_client(client);
 }
 
-void add_client(struct game_client *client)
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
+void add_client(struct in6_addr address, int sockfd)
+#else
+void add_client(struct in_addr address, int sockfd)
+#endif
 {
+	struct game_client *client;
+
+	client = create_client(NULL, 0, address, sockfd);
 	hashtable_insert(client_hashtable, client, &client->sock);
 }
 
@@ -113,10 +120,8 @@ void client_list_destroy()
 {
 	struct game_client *client;
 
-	for(client = first_client(); client; client = next_client()) {
+	for (client = first_client(); client; client = next_client())
 		remove_client(client);
-		delete_client(client);
-	}
 
 	free(client_list);
 	client_list = NULL;

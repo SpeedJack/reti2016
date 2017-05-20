@@ -8,26 +8,36 @@
 #include <string.h>
 #include "console.h"
 
-#define UINT16_BUFFER_SIZE	10
-
-uint16_t string_to_uint16(const char *str)
+bool string_to_uint16(const char *str, uint16_t *dst)
 {
 	char *garbage = NULL;
 	long value = 0;
 
 	errno = 0;
-
 	value = strtol(str, &garbage, 0);
 
 	if (errno || (garbage && *garbage != '\0') ||
-				value < 1 || value > (1 << 16) - 1)
-		return 0;
-	return (uint16_t)value;
+			value < 0 || value > (1 << 16) - 1)
+		return false;
+
+	*dst = (uint16_t)value;
+	return true;
+}
+
+int flush_stdin()
+{
+	char c;
+	int len;
+
+	len = 0;
+	while ((c = getchar()) != '\n' && c != EOF)
+		len++;
+	return len;
 }
 
 int get_line(char *buffer, size_t size)
 {
-	int c, len;
+	int len;
 
 	assert(size > 0);
 
@@ -37,8 +47,7 @@ int get_line(char *buffer, size_t size)
 	if (buffer[len-1] == '\n')
 		buffer[len-1] = '\0';
 	else
-		while ((c = getchar()) != '\n' && c != EOF)
-			len++;
+		len += flush_stdin();
 	return len - 1;
 }
 
@@ -48,8 +57,7 @@ bool get_uint16(uint16_t *result)
 
 	if (get_line(buffer, UINT16_BUFFER_SIZE) >= UINT16_BUFFER_SIZE)
 		return false;
-	*result = string_to_uint16(buffer);
-	return *result != 0;
+	return string_to_uint16(buffer, result);
 }
 
 char get_character()
@@ -58,7 +66,11 @@ char get_character()
 
 	do {
 		ch = getchar();
+		if (ch == '\n')
+			return ch;
 	} while (isspace(ch));
+
+	flush_stdin();
 
 	return ch;
 }

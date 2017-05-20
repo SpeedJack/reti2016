@@ -15,27 +15,66 @@
 #include "game_client.h"
 #include "netutil.h"
 #include "proto.h"
+#include "sighandler.h"
 
 static bool in_game;
 static int server_sock;
 static int game_sock;
+static char game_opponent[MAX_USERNAME_SIZE];
 
 static inline void show_help()
 {
-	puts("\nAvailable commands:\n"
-			"!help --> shows the list of available commands\n"
-			"!who --> shows the list of connected players\n"
-			"!connect username --> starts a game with the player username\n"
-			"!quit --> disconnects and exits");
+	if (in_game)
+		puts("\nAvailable commands:\n"
+				"!help --> shows the list of available commands\n"
+				"!disconnect --> disconnects from the game\n"
+				"!shot square --> shots the specified square\n"
+				"!show --> shows the current game table");
+	else
+		puts("\nAvailable commands:\n"
+				"!help --> shows the list of available commands\n"
+				"!who --> shows the list of connected players\n"
+				"!connect username --> starts a game with the specified player\n"
+				"!quit --> disconnects and exits");
 }
 
 static bool ask_to_play(const char *username)
 {
-	char c;
+
 
 	do {
-		printf("\nPlayer %s invited you to play a match. Accept? [Y/n] ",
+		char c;
+		fd_set readfds;
+		int ready;
+
+		FD_ZERO(&readfds);
+		FD_SET(fileno(stdin), &readfds);
+		FD_SET(server_sock, &readfds);
+
+		printf("Player %s invited you to play a match. Accept? [Y/n] ",
 				username);
+		fflush(stdout);
+
+		errno = 0;
+		ready = select(server_sock + 1, &readfds, NULL, NULL, NULL);
+
+		if (ready == -1 && errno == EINTR) {
+			puts("\nExiting...");
+			break;
+		} else if (ready == -1) {
+			print_error("\nselect", errno);
+			break;
+		}
+
+		if (FD_ISSET(server_sock, &readfds)) {
+			putchar('\n');
+			if (!bytes_available(server_sock)) {
+				printf("The server has closed the connection.\n");
+				break;
+			}
+			return false;
+		}
+
 		c = get_character();
 
 		switch (c) {
@@ -47,9 +86,13 @@ static bool ask_to_play(const char *username)
 		case 'N':
 			return false;
 		default:
-			puts("Invalid answer.");
+			print_error("Invalid answer.", 0);
 		}
 	} while (1);
+
+	close(game_sock);
+	close(server_sock);
+	exit(EXIT_SUCCESS);
 }
 
 static int ask_username(char *username)
@@ -57,12 +100,12 @@ static int ask_username(char *username)
 	int len;
 
 	do {
-		printf("Insert your username: ");
+		fputs("Insert your username: ", stdout);
 		fflush(stdout);
 		len = get_line(username, MAX_USERNAME_SIZE);
 
 		if (!valid_username(username) || len > MAX_USERNAME_LENGTH) {
-			printf("Invalid username. Username must be at leas %d characters and less than %d characters and should countain only these characters:\n%s\n",
+			printf_error("Invalid username. Username must be at leas %d characters and less than %d characters and should countain only these characters:\n%s",
 					MIN_USERNAME_LENGTH,
 					MAX_USERNAME_LENGTH,
 					USERNAME_ALLOWED_CHARS);
@@ -73,69 +116,67 @@ static int ask_username(char *username)
 	} while (1);
 }
 
-static uint16_t ask_port()
+static in_port_t ask_port()
 {
 	uint16_t port;
+	in_port_t net_port;
 
 	do {
-		printf("Insert your UDP port for incoming connections: ");
+		printf("Insert your UDP port for incoming connections (number in range %d-%d): ",
+				MIN_UDP_PORT_NUMBER, MAX_UDP_PORT_NUMBER);
 		fflush(stdout);
-		if (!get_uint16(&port) || port == 0) {
-			puts("Invalid port. Port must be an integer value in the range 1-65535.");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtype-limits"
+		if (!get_uint16(&port) || port < MIN_UDP_PORT_NUMBER ||
+				port > MAX_UDP_PORT_NUMBER) {
+#pragma GCC diagnostic pop
+			printf_error("Invalid port. Port must be an integer value in the range %d-%d.",
+					MIN_UDP_PORT_NUMBER, MAX_UDP_PORT_NUMBER);
 			continue;
 		}
 
-		if (-1 == (game_sock = open_local_port(htons(port)))) {
-			puts("Can not open this port.");
+		net_port = htons(port);
+
+		if (-1 == (game_sock = open_local_port(net_port))) {
+			print_error("Can not open this port.", 0);
 			continue;
 		}
 
-		return port;
+		return net_port;
 	} while (1);
 }
 
 static bool do_login()
 {
 	char username[MAX_USERNAME_SIZE];
-	uint16_t port;
-	struct req_login req;
-	struct message *ans;
+	in_port_t port;
+	struct ans_login *ans;
 
 	do {
 		ask_username(username);
 		port = ask_port();
 
-		req.header.type = REQ_LOGIN;
-		req.header.length = MSG_BODY_SIZE(struct req_login);
+		if (!send_req_login(server_sock, username, port))
+				return false;
 
-		strncpy(req.username, username, MAX_USERNAME_SIZE);
-		req.udp_port = port;
-
-		if (!write_message(server_sock, (struct message *)&req)) {
-			print_error("Error sending REQ_LOGIN message.", 0);
+		ans = (struct ans_login *)read_message_type(server_sock,
+				ANS_LOGIN);
+		if (!ans)
 			return false;
-		}
 
-		if (!read_message(server_sock, &ans) ||
-				ans->header.type != ANS_LOGIN) {
-			print_error("Error reading message ANS_LOGIN from server.",
-					0);
-			delete_message(ans);
-			return false;
-		}
-
-		if (((struct ans_login *)ans)->response == LOGIN_OK)
+		if (ans->response == LOGIN_OK)
 			break;
 
-		switch(((struct ans_login *)ans)->response) {
+		switch (ans->response) {
 		case LOGIN_INVALID_NAME:
-			printf("Invalid username. Username must be at leas %d characters and less than %d characters and should countain only these characters:\n%s\n",
+			printf_error("Invalid username. Username must be at leas %d characters and less than %d characters and should countain only these characters:\n%s",
 					MIN_USERNAME_LENGTH,
 					MAX_USERNAME_LENGTH,
 					USERNAME_ALLOWED_CHARS);
 			break;
 		case LOGIN_NAME_INUSE:
-			printf("This username is already in use by another player. Please choose another username.\n");
+			print_error("This username is already in use by another player. Please choose another username.",
+					0);
 			break;
 		default:
 			print_error("Invalid response from server.", 0);
@@ -153,36 +194,39 @@ static bool do_login()
 	return true;
 }
 
+static void process_msg_endgame(struct msg_endgame *msg)
+{
+	if (!in_game)
+		return;
+
+	if (msg->disconnected)
+		printf("Player %s has disconnected!\n", game_opponent);
+	else
+		printf("You have sunk all %s's ships! YOU WON!\n", game_opponent);
+
+	in_game = false;
+}
+
 static void print_player_list()
 {
 #define _STRINGIZE(a) #a
 #define STRINGIZE(a) _STRINGIZE(a)
 
-	struct req_who req;
 	struct ans_who *ans;
 	int i, count;
 
-	req.header.type = REQ_WHO;
-	req.header.length = MSG_BODY_SIZE(struct req_who);
-
-	if (!write_message(server_sock, (struct message *)&req)) {
-		print_error("Error sending REQ_WHO message.", 0);
+	if (!send_req_who(server_sock))
 		return;
-	}
 
-	if (!read_message(server_sock, (struct message **)&ans) ||
-			ans->header.type != ANS_WHO) {
-		print_error("Error reading message ANS_WHO from server.", 0);
-		delete_message((struct message *)ans);
+	ans = (struct ans_who *)read_message(server_sock);
+	if (!ans)
 		return;
-	}
 
-	assert((ans->header.length % sizeof(struct who_player)) == 0);
 	count = ans->header.length / sizeof(struct who_player);
 
 	if (count == 0) {
 		puts("There are no connected players.");
-		delete_message((struct message *)ans);
+		delete_message(ans);
 		return;
 	}
 
@@ -192,18 +236,18 @@ static void print_player_list()
 	for (i = 0; i < count; i++) {
 		char status[WHO_STATUS_BUFFER_SIZE];
 
-		switch (ans->player[i].status) {
+		switch (ans->players[i].status) {
 		case PLAYER_AWAITING_REPLY:
 			fputs(COLOR_PLAYER_AWAITING, stdout);
 			snprintf(status, WHO_STATUS_BUFFER_SIZE,
 					"AWAITING REPLY (%s)",
-					ans->player[i].opponent);
+					ans->players[i].opponent);
 			break;
 		case PLAYER_IN_GAME:
 			fputs(COLOR_PLAYER_IN_GAME, stdout);
 			snprintf(status, WHO_STATUS_BUFFER_SIZE,
 					"IN GAME (%s)",
-					ans->player[i].opponent);
+					ans->players[i].opponent);
 			break;
 		case PLAYER_IDLE:
 		default:
@@ -213,50 +257,65 @@ static void print_player_list()
 
 		printf("%-" STRINGIZE(MAX_USERNAME_LENGTH) "s\t%"
 				STRINGIZE(WHO_STATUS_LENGTH) "s\n",
-				ans->player[i].username, status);
+				ans->players[i].username, status);
 
 		fputs(COLOR_RESET, stdout);
 	}
 
-	delete_message((struct message *)ans);
+	delete_message(ans);
 }
 
 static void process_play_request(struct req_play *msg)
 {
-	struct req_play_ans ans;
+	struct ans_play *ans;
+	bool accept;
 
-	ans.header.type = REQ_PLAY_ANS;
-	ans.header.length = MSG_BODY_SIZE(struct req_play_ans);
+	accept = ask_to_play(msg->opponent);
 
-	in_game = ans.accept = ask_to_play(msg->opponent_username);
+	if (!bytes_available(server_sock) &&
+			!send_req_play_ans(server_sock, accept))
+		return;
 
-	if (!write_message(server_sock, (struct message *)&ans)) {
-		print_error("Error sending REQ_PLAY_ANS message.", 0);
-		in_game = false;
+	ans = (struct ans_play *)read_message_type(server_sock, ANS_PLAY);
+	if (!ans)
+		return;
+
+	switch (ans->response) {
+	case PLAY_DECLINE:
+		if (accept)
+			printf("The opponent has closed the connection.\n");
+		else
+			printf("You refused the game!\n");
+		break;
+	case PLAY_ACCEPT:
+		printf("You are now playing with %s!\n", msg->opponent);
+		strncpy(game_opponent, msg->opponent, MAX_USERNAME_SIZE);
+		in_game = true;
+		break;
+	case PLAY_TIMEDOUT:
+		puts("Request timed out.");
+		break;
+	case PLAY_INVALID_OPPONENT:
+	case PLAY_OPPONENT_IN_GAME:
+	default:
+		print_error("Invalid response from server.", 0);
 	}
+
+	delete_message(ans);
 }
 
 static void send_play_request(const char *username)
 {
-	struct req_play req;
 	struct ans_play *ans;
 
-	req.header.type = REQ_PLAY;
-	req.header.length = MSG_BODY_SIZE(struct req_play);
-
-	strncpy(req.opponent_username, username, MAX_USERNAME_SIZE);
-
-	if (!write_message(server_sock, (struct message *)&req)) {
-		print_error("Error sending REQ_PLAY message.", 0);
+	if (!send_req_play(server_sock, username))
 		return;
-	}
 
-	if (!read_message(server_sock, (struct message **)&ans) ||
-			ans->header.type != ANS_PLAY) {
-		print_error("Error reading message ANS_PLAY from server.", 0);
-		delete_message((struct message *)ans);
+	printf("Waiting for response from %s...\n", username);
+
+	ans = (struct ans_play *)read_message_type(server_sock, ANS_PLAY);
+	if (!ans)
 		return;
-	}
 
 	switch (ans->response) {
 	case PLAY_DECLINE:
@@ -269,6 +328,10 @@ static void send_play_request(const char *username)
 	case PLAY_INVALID_OPPONENT:
 		printf("Player %s not found.\n", username);
 		break;
+	case PLAY_OPPONENT_IN_GAME:
+		printf("Player %s is currently playing with another player.\n",
+				username);
+		break;
 	case PLAY_TIMEDOUT:
 		printf("Player %s is currently AFK. Request timed out.\n",
 				username);
@@ -277,7 +340,7 @@ static void send_play_request(const char *username)
 		print_error("Invalid response from server.", 0);
 	}
 
-	delete_message((struct message *)ans);
+	delete_message(ans);
 }
 
 static void process_std_command(const char *cmd, const char *args)
@@ -316,9 +379,8 @@ static void process_game_command(const char *cmd, const char *args)
 	} else if (strcasecmp(cmd, "!show") == 0) {
 		; /* show */
 	} else if (strcasecmp(cmd, "!disconnect") == 0) {
-		close(game_sock);
-		; /* send MSG_ENDGAME */
-		puts("Disconnected from game: YOU GAVE UP!");
+		send_msg_endgame(server_sock, true);
+		puts("Successfully disconnected from the game.");
 		in_game = false;
 	} else {
 		printf_error("Invalid command %s.", cmd);
@@ -333,6 +395,8 @@ static void process_command()
 	int len;
 
 	len = get_line(buffer, COMMAND_BUFFER_SIZE);
+	if (!len)
+		return;
 	if (len > COMMAND_BUFFER_SIZE - 1) {
 		print_error("Too long input.", 0);
 		return;
@@ -358,19 +422,25 @@ static bool get_server_message()
 {
 	struct message *msg;
 
-	if (!read_message(server_sock, &msg)) {
-		print_error("get_server_message: error reading message from server.", 0);
+	msg = read_message(server_sock);
+	if (!msg)
+		return false;
+
+	switch (msg->header.type) {
+	case REQ_PLAY:
+		process_play_request((struct req_play *)msg);
+		break;
+	case MSG_ENDGAME:
+		process_msg_endgame((struct msg_endgame *)msg);
+		break;
+	default:
+		print_error("Received an invalid message from server.", 0);
+		delete_message(msg);
 		return false;
 	}
 
-	if (msg->header.type == REQ_PLAY) {
-		process_play_request((struct req_play *)msg);
-		return true;
-	}
-
-	print_error("Received an invalid message from server.", 0);
 	delete_message(msg);
-	return false;
+	return true;
 }
 
 static bool get_opponent_message()
@@ -393,13 +463,12 @@ static void wait_for_input()
 
 	for (;;) {
 		int fd, ready;
+		bool on_newline;
 
-		putchar('\n');
-		if (in_game)
-			putchar('#');
-		else
-			putchar('>');
-		putchar(' ');
+		if (received_signal)
+			return;
+
+		printf("\n%c ", in_game ? '#' : '>');
 		fflush(stdout);
 
 		_readfds = readfds;
@@ -408,15 +477,22 @@ static void wait_for_input()
 		ready = select(nfds + 1, &_readfds, NULL, NULL, NULL);
 
 		if (ready == -1 && errno == EINTR) {
-			continue;
+			return;
 		} else if (ready == -1) {
 			print_error("\nselect", errno);
 			break;
 		}
 
+		on_newline = false;
 		for (fd = 0; fd <= nfds; fd++) {
 			if (!FD_ISSET(fd, &_readfds))
 				continue;
+
+			if (!on_newline &&
+					!FD_ISSET(fileno(stdin), &_readfds)) {
+				putchar('\n');
+				on_newline = true;
+			}
 
 			if (fd == fileno(stdin)) {
 				process_command();
@@ -425,13 +501,11 @@ static void wait_for_input()
 
 			if (fd == server_sock) {
 				if (!bytes_available(fd)) {
-					printf("\nThe server has closed the connection.\n");
+					printf("The server has closed the connection.\n");
 					return;
 				}
 
 				if (!get_server_message()) {
-					print_error("\nget_server_message: error. Closing connection.",
-							0);
 					close(game_sock);
 					close(server_sock);
 					exit(EXIT_FAILURE);
@@ -441,14 +515,12 @@ static void wait_for_input()
 
 			if (fd == game_sock) {
 				if (!in_game) {
-					print_error("\nReceived data on UDP socket when not in game.",
+					print_error("Received data on UDP socket when not in game.",
 							0);
 					continue;
 				}
 
 				if (!get_opponent_message()) {
-					print_error("\nget_opponent_message: error. Closing connection.",
-							0);
 					close(game_sock);
 					close(server_sock);
 					exit(EXIT_FAILURE);
@@ -485,13 +557,15 @@ int main(int argc, char **argv)
 			print_error("Invalid address", 0);
 			exit(EXIT_FAILURE);
 		}
-		port = string_to_uint16(argv[2]);
-		if (port == 0) {
-			print_error("Invalid port. Enter a value between 1 and 65535\n",
+		if (!string_to_uint16(argv[2], &port) || port == 0) {
+			print_error("Invalid port. Enter a value between 1 and 65535",
 					0);
 			exit(EXIT_FAILURE);
 		}
 	}
+
+	if (!sighandler_init())
+		exit(EXIT_FAILURE);
 
 	server_sock = connect_to_server(addr, htons(port));
 	if (server_sock == -1) {
@@ -515,6 +589,7 @@ int main(int argc, char **argv)
 	}
 
 	show_help();
+	putchar('\n');
 
 	wait_for_input();
 
