@@ -10,7 +10,7 @@ CFLAGS = $(DEPFLAGS) -ggdb3 -std=c99 -Wall -Wextra \
 	 -iquote include -imacros config.h -include bool.h
 
 EXEs = battle_client battle_server
-COMMONOBJs = console.o netutil.o match.o game_client.o
+COMMONOBJs = console.o sighandler.o netutil.o match.o game_client.o
 COBJs = $(COMMONOBJs) proto.o battle_client.o
 SOBJs = $(COMMONOBJs) server_proto.o list.o hashtable.o client_list.o battle_server.o
 OBJs = $(COBJs) $(SOBJs)
