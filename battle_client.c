@@ -440,7 +440,7 @@ static void place_ships()
 	send_msg_ready(game.sock, &game.opponent.sa);
 
 	printf("Waiting for %s...", game.opponent.username);
-	if (game.my_turn) /*TODO*/
+	if (game.my_turn)
 		putchar('\n');
 	game.active = true;
 	game.opponent.ready = false;
@@ -627,26 +627,31 @@ static void process_std_command(const char *cmd, const char *args)
 	} else {
 		printf_error("Invalid command %s.", cmd);
 	}
+	putchar('\n');
 }
 
 static void process_game_command(const char *cmd, char *args)
 {
 	if (strcasecmp(cmd, "!help") == 0) {
 		show_help();
+		putchar('\n');
 	} else if (strcasecmp(cmd, "!shot") == 0) {
 		if (args == NULL)
-			print_error("!shot requires a valid game table square as argument.",
+			print_error("!shot requires a valid game table square as argument.\n",
 					0);
 		else
 			shot_opponent_cell(args);
 	} else if (strcasecmp(cmd, "!show") == 0) {
 		show_game_tables();
+		putchar('\n');
 	} else if (strcasecmp(cmd, "!disconnect") == 0) {
 		send_msg_endgame(server_sock, true);
 		puts("Successfully disconnected from the game.");
 		game.active = false;
+		putchar('\n');
 	} else {
 		printf_error("Invalid command %s.", cmd);
+		putchar('\n');
 	}
 }
 
@@ -679,7 +684,6 @@ static void process_command()
 		process_game_command(cmd, args);
 	else
 		process_std_command(cmd, args);
-	putchar('\n');
 }
 
 static bool get_server_message()
@@ -692,6 +696,7 @@ static bool get_server_message()
 
 	switch (msg->header.type) {
 	case REQ_PLAY:
+		putchar('\n');
 		process_play_request((struct req_play *)msg);
 		break;
 	case MSG_ENDGAME:
@@ -734,9 +739,9 @@ static bool get_opponent_message()
 		return false;
 	}
 
-	if (game.my_turn)
+	if (game.active && game.my_turn)
 		puts("It's your turn!");
-	else
+	else if (game.active)
 		printf("It's %s's turn.\n", game.opponent.username);
 
 	delete_message(msg);
@@ -752,7 +757,6 @@ static inline void show_prompt()
 	fflush(stdout);
 }
 
-/*TODO*/
 static void wait_for_input()
 {
 	fd_set readfds, _readfds;
@@ -774,10 +778,14 @@ static void wait_for_input()
 		if (received_signal)
 			return;
 
+/* FIXME: sometimes the prompt doesn't shows when it should */
 		if (!select_timeout &&
-				!(game.active && !game.opponent.ready) &&
+				(!game.active ||
+				 (game.my_turn && game.opponent.ready)
+					) &&
 				!(!game.active &&
-					FD_ISSET(game.sock, &_readfds))) {
+					FD_ISSET(game.sock, &_readfds))
+				) {
 			if (!FD_ISSET(fileno(stdin), &_readfds))
 				putchar('\n');
 			show_prompt();
@@ -804,22 +812,12 @@ static void wait_for_input()
 				!FD_ISSET(game.sock, &_readfds) &&
 				!FD_ISSET(fileno(stdin), &_readfds);
 
-		if (!select_timeout &&
-				!FD_ISSET(fileno(stdin), &_readfds) &&
-				(!game.active || game.opponent.ready) &&
-				!(!game.active &&
-					FD_ISSET(game.sock, &_readfds)))
-			putchar('\n');
-
 		if (game.active && select_timeout &&
 				difftime(time(NULL), last_input) >=
 				IN_GAME_TIMEOUT)
 		{
 			send_msg_endgame(server_sock, true);
-			if (!FD_ISSET(fileno(stdin), &_readfds) &&
-					game.opponent.ready)
-				putchar('\n');
-			puts("Disconnected for inactivity.");
+			puts("\nDisconnected for inactivity.");
 			game.active = select_timeout = false;
 			continue;
 		}
@@ -829,8 +827,8 @@ static void wait_for_input()
 				continue;
 
 			if (fd == fileno(stdin)) {
-				if (!game.active || game.my_turn ||
-						!game.opponent.ready) {
+				if (!game.active || (game.my_turn &&
+						game.opponent.ready)) {
 					process_command();
 					last_input = time(NULL);
 				} else {
@@ -841,7 +839,7 @@ static void wait_for_input()
 
 			if (fd == server_sock) {
 				if (!bytes_available(fd)) {
-					printf("The server has closed the connection.\n");
+					printf("\nThe server has closed the connection.\n");
 					return;
 				}
 
