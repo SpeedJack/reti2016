@@ -5,9 +5,9 @@ $(shell mkdir -p $(DEPDIR) > /dev/null)
 POSTCOMPILE = mv -f $(DEPDIR)/$*.Td $(DEPDIR)/$*.d
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.Td
 
-CFLAGS = $(DEPFLAGS) -ggdb3 -std=c99 -Wall -Wextra \
-	 -Wpedantic -D_POSIX_C_SOURCE=200112L \
-	 -iquote include -imacros config.h -include bool.h
+STDFLAGS = $(DEPFLAGS) -std=c99 -D_POSIX_C_SOURCE=200112L \
+	   -iquote include -imacros config.h -include bool.h
+CFLAGS = $(STDFLAGS) -ggdb3 -Wall -Wextra -Wpedantic\
 
 EXEs = battle_client battle_server
 COMMONOBJs = console.o sighandler.o netutil.o match.o game_client.o
@@ -28,6 +28,9 @@ OBJs = $(COBJs) $(SOBJs)
 
 
 all: $(EXEs)
+
+nodebug: CFLAGS = $(STDFLAGS) -DNDEBUG
+nodebug: $(EXEs)
 
 battle_client: $(COBJs)
 
