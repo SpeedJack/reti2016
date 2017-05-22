@@ -37,10 +37,13 @@ int listen_on_port(in_port_t port)
 		return -1;
 	}
 
-	if (bind(sfd, (struct sockaddr *)&sa,
+	while (bind(sfd, (struct sockaddr *)&sa,
 			STRUCT_SOCKADDR_SIZE) != 0) {
 		print_error("bind", errno);
-		goto exit_close_sock;
+		if (errno != EADDRINUSE)
+			goto exit_close_sock;
+		printf("(retry in %d seconds...)\n", BIND_INUSE_RETRY_SECS);
+		sleep(BIND_INUSE_RETRY_SECS);
 	}
 
 	if (listen(sfd, LISTEN_BACKLOG) != 0) {
@@ -113,75 +116,42 @@ int bytes_available(int fd)
 	return bytes;
 }
 
-bool read_socket(int sockfd, void *buf, size_t len)
+bool read_socket(int sockfd, bool connected, void *buf, size_t len, int flags)
 {
-	ssize_t left, ret;
-	char *b;
+	ssize_t read;
+
+	if (!buf || !len)
+		return true;
 
 	errno = 0;
-	for (left = (ssize_t)len, b = (char *)buf; left;
-			b += ret, left -= ret) {
-		ret = recv(sockfd, b, (size_t)left, MSG_WAITALL);
-		if (ret < 0)
-			print_error("recv", errno);
-		if (ret <= 0)
-			return false;
-	}
-	return true;
-}
-
-bool write_socket(int sockfd, const void *buf, size_t len)
-{
-	ssize_t left, ret;
-	char *b;
-
-	errno = 0;
-	for (left = (ssize_t)len, b = (char *)buf; left;
-			b += ret, left -= ret) {
-		ret = send(sockfd, b, (size_t)left, 0);
-		if (ret < 0) {
-			print_error("send", errno);
-			return false;
-		}
-	}
-	return true;
-}
-
-bool read_udp_socket(int sockfd, void *buf, size_t len, bool peek)
-{
-	ssize_t left, ret;
-	char *b;
-
-	errno = 0;
-	for (left = (ssize_t)len, b = (char *)buf; left;
-			b += ret, left -= ret) {
-		ret = recvfrom(sockfd, b, (size_t)left, peek ? MSG_PEEK : 0,
+	if (connected)
+		read = recv(sockfd, buf, len, flags | MSG_WAITALL);
+	else
+		read = recvfrom(sockfd, buf, len, flags | MSG_WAITALL,
 				NULL, NULL);
-		if (ret < 0)
-			print_error("recvfrom", errno);
-		if (ret <= 0)
-			return false;
-	}
-	return true;
+	if (read < 0)
+		print_error(connected ? "recv" : "recvfrom", errno);
+	return (read == (ssize_t)len);
 }
 
-bool write_udp_socket(int sockfd, struct sockaddr_storage *dest,
-		const void *buf, size_t len)
+bool write_socket(int sockfd, struct sockaddr_storage *dest,
+		const void *buf, size_t len, int flags)
 {
-	ssize_t left, ret;
-	char *b;
+	ssize_t sent;
+
+	if (!buf || !len)
+		return true;
 
 	errno = 0;
-	for (left = (ssize_t)len, b = (char *)buf; left;
-			b += ret, left -= ret) {
-		ret = sendto(sockfd, b, (size_t)left, 0,
+	if (dest)
+		sent = sendto(sockfd, buf, len, flags | MSG_NOSIGNAL,
 				(struct sockaddr *)dest, STRUCT_SOCKADDR_SIZE);
-		if (ret < 0) {
-			print_error("sendto", errno);
-			return false;
-		}
-	}
-	return true;
+	else
+		sent = send(sockfd, buf, len, flags | MSG_NOSIGNAL);
+
+	if (sent < 0)
+		print_error(dest ? "sendto" : "send", errno);
+	return (sent == (ssize_t)len);
 }
 
 bool get_peer_address(int sockfd, char *ipstr, socklen_t size, in_port_t *port)

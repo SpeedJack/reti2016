@@ -132,28 +132,38 @@ static void dump_message(struct message *msg, int sockfd, bool send)
 }
 #endif
 
-static struct message *_read_message(int sockfd, bool connected)
+static struct message *_read_message(int sockfd, bool connected, bool *noblock)
 {
 	struct message *msg;
 	struct msg_header mh;
-	bool res;
+	int avail;
 
-	if (connected)
-/* TODO: if server, check if 8 bytes are available before reading
- * (non-blocking) */
-		res = read_socket(sockfd, &mh, sizeof(struct msg_header));
-	else
-		res = read_udp_socket(sockfd, &mh, sizeof(struct msg_header),
-				true);
-	if (!res) {
-		printf_error("read_udp_message: error reading message header from socket %d",
+	if (noblock && *noblock) {
+		avail = bytes_available(sockfd);
+		if (avail < (int)sizeof(struct msg_header)) {
+			*noblock = false;
+			return NULL;
+		}
+	}
+
+	if (!read_socket(sockfd, connected, &mh, sizeof(struct msg_header),
+				MSG_PEEK)) {
+		printf_error("_read_message: error reading message header from socket %d",
 				sockfd);
 		return NULL;
 	}
 	if (!valid_message_header(mh)) {
-		printf_error("read_udp_message: received an invalid message from socket %d",
+		printf_error("_read_message: received an invalid message from socket %d",
 				sockfd);
 		return NULL;
+	}
+
+	if (noblock && *noblock) {
+		avail = bytes_available(sockfd);
+		if (avail < (int)((sizeof(struct msg_header) + mh.length))) {
+			*noblock = false;
+			return NULL;
+		}
 	}
 
 	errno = 0;
@@ -163,40 +173,44 @@ static struct message *_read_message(int sockfd, bool connected)
 		return NULL;
 	}
 
-	if (connected) {
-/* TODO: if server, check if mh.length bytes are available before reading
- * (non-blocking) */
-		msg->header = mh;
-		res = read_socket(sockfd, msg->body, mh.length);
-	} else {
-		res = read_udp_socket(sockfd, msg,
-				sizeof(struct msg_header) + mh.length, false);
-	}
-	if (res) {
+	if (read_socket(sockfd, connected, msg,
+				sizeof(struct msg_header) + mh.length, 0)) {
 #ifdef	BATTLE_SERVER
 		dump_message(msg, sockfd, false);
 #endif
 		if (msg->header.type == ANS_BADREQ) {
-			printf_error("read_udp_message: received ANS_BADREQ from socket %d",
+			printf_error("_read_message: received ANS_BADREQ from socket %d",
 					sockfd);
 			return NULL;
 		}
 		return msg;
 	}
 
-	printf_error("read_udp_message: error reading message %s from socket %d",
+	printf_error("_read_message: error reading message %s from socket %d",
 			message_type_name(msg->header.type), sockfd);
 	return NULL;
 }
 
 struct message *read_message(int sockfd)
 {
-	return _read_message(sockfd, true);
+	return _read_message(sockfd, true, NULL);
+}
+
+struct message *read_message_async(int sockfd, bool *noblock)
+{
+	*noblock = true;
+	return _read_message(sockfd, true, noblock);
 }
 
 struct message *read_udp_message(int sockfd)
 {
-	return _read_message(sockfd, false);
+	return _read_message(sockfd, false, NULL);
+}
+
+struct message *read_udp_message_async(int sockfd, bool *noblock)
+{
+	*noblock = true;
+	return _read_message(sockfd, false, noblock);
 }
 
 struct message *read_message_type(int sockfd, enum msg_type type)
@@ -221,8 +235,6 @@ struct message *read_message_type(int sockfd, enum msg_type type)
 static bool _write_message(int sockfd, struct message *msg,
 		struct sockaddr_storage *dest)
 {
-	bool res;
-
 	msg->header.magic[0] = 'B';
 	msg->header.magic[1] = 'P';
 	msg->header._reserved = 0x00;
@@ -230,17 +242,15 @@ static bool _write_message(int sockfd, struct message *msg,
 #ifdef	BATTLE_SERVER
 	dump_message(msg, sockfd, true);
 #endif
-	if (dest)
-		res = write_udp_socket(sockfd, dest, msg,
+
+	if (write_socket(sockfd, dest, msg,
 				sizeof(struct msg_header) +
-				msg->header.length);
-	else
-		res = write_socket(sockfd, msg, sizeof(struct msg_header) +
-				msg->header.length);
-	if (!res)
-		printf_error("write_message: error writing message %s to socket %d",
-				message_type_name(msg->header.type), sockfd);
-	return res;
+				msg->header.length, 0))
+		return true;
+
+	printf_error("_write_message: error writing message %s to socket %d",
+			message_type_name(msg->header.type), sockfd);
+	return false;
 }
 
 static inline bool write_message(int sockfd, struct message *msg)

@@ -285,6 +285,9 @@ static void show_game_tables()
 
 static void process_msg_result(struct msg_result *msg)
 {
+	if (game.my_turn)
+		return;
+
 	printf("%s says: %s\n", game.opponent.username, msg->hit ?
 			"hit! :-)" : "missed. :-(");
 
@@ -312,6 +315,8 @@ static inline bool game_lost()
 static void process_msg_shot(struct msg_shot *msg)
 {
 	bool hit;
+	if (game.my_turn)
+		return;
 
 	if (msg->row > GAME_TABLE_ROWS || msg->col > GAME_TABLE_COLS)
 		return;
@@ -333,35 +338,21 @@ static void process_msg_shot(struct msg_shot *msg)
 	}
 }
 
-/* TODO: create a get_cell function that works always on buf; get_line is
- * then performed by place_ship */
-static bool ask_cell(int *row, int *col, char *buf)
+static bool get_cell(char *buf, int *row, int *col)
 {
-	char buffer[CELL_INPUT_BUFFER_SIZE];
-	char *ptr;
 	int ch;
 	uint16_t num;
 	int len;
 
-	if (buf) {
-		ptr = buf;
-		len = strlen(ptr);
-	} else {
-		ptr = buffer;
-		len = get_line(ptr, CELL_INPUT_BUFFER_SIZE);
-	}
+	len = strlen(buf);
 	if (len < 2) {
 		print_error("Invalid format. Insert row letter followed by column number.",
 				0);
 		return false;
 	}
-	if (len >= CELL_INPUT_BUFFER_SIZE) {
-		print_error("Too long input.", 0);
-		return false;
-	}
 
-	ptr = trim_white_spaces(ptr);
-	ch = toupper((unsigned char)*ptr);
+	buf = trim_white_spaces(buf);
+	ch = toupper((unsigned char)*buf);
 	if (!isalpha((unsigned char)ch) ||
 			ch < MIN_ROW_LETTER || ch > MAX_ROW_LETTER) {
 		printf_error("Invalid row. Insert a row between %c and %c.",
@@ -374,9 +365,9 @@ static bool ask_cell(int *row, int *col, char *buf)
 		return false;
 	}
 
-	ptr++;
-	ptr = trim_white_spaces(ptr);
-	if (!isdigit((unsigned char)*ptr) || !string_to_uint16(ptr, &num) ||
+	buf++;
+	buf = trim_white_spaces(buf);
+	if (!isdigit((unsigned char)*buf) || !string_to_uint16(buf, &num) ||
 			num < MIN_COL_NUMBER || num > MAX_COL_NUMBER) {
 		printf_error("Invalid column. Insert a column between %d and %d.",
 				MIN_COL_NUMBER, MAX_COL_NUMBER);
@@ -395,7 +386,7 @@ static void shot_opponent_cell(char *buffer)
 {
 	int row, col;
 
-	if (!ask_cell(&row, &col, buffer))
+	if (!get_cell(buffer, &row, &col))
 		return;
 
 	if (game.opponent.table[row][col] != CELL_WATER) {
@@ -411,8 +402,9 @@ static void shot_opponent_cell(char *buffer)
 
 static void place_ships()
 {
-	int i;
+	int i, len;
 	int row, col;
+	char buffer[CELL_INPUT_BUFFER_SIZE];
 
 	for (row = 0; row < GAME_TABLE_ROWS; row++)
 		for (col = 0; col < GAME_TABLE_COLS; col++)
@@ -423,12 +415,19 @@ static void place_ships()
 			SHIP_COUNT);
 
 	for (i = 0; i < SHIP_COUNT;) {
-
 		printf("Ship %d: ", i + 1);
 		fflush(stdout);
 
-		if (!ask_cell(&row, &col, NULL))
+		len = get_line(buffer, CELL_INPUT_BUFFER_SIZE);
+
+		if (len >= CELL_INPUT_BUFFER_SIZE) {
+			print_error("Too long input.", 0);
 			continue;
+		}
+
+		if (!get_cell(buffer, &row, &col))
+			continue;
+
 		if (game.my.table[row][col] == CELL_SHIP) {
 			print_error("You have already placed a ship here.", 0);
 			continue;
@@ -721,6 +720,7 @@ static bool get_opponent_message()
 		game.opponent.ready = true;
 		printf("%s is ready!\n", game.opponent.username);
 		show_help();
+		putchar('\n');
 		break;
 	case MSG_SHOT:
 		process_msg_shot((struct msg_shot *)msg);

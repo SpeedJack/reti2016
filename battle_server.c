@@ -177,8 +177,11 @@ static void do_login(struct game_client *client, struct req_login *msg)
 static bool dispatch_message(struct game_client *client)
 {
 	struct message *msg;
+	bool noblock;
 
-	msg = read_message(client->sock);
+	msg = read_message_async(client->sock, &noblock);
+	if (!noblock)
+		return true;
 	if (!msg)
 		return false;
 
@@ -347,12 +350,14 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 
-	if (!sighandler_init())
-		exit(EXIT_FAILURE);
-
 	sfd = listen_on_port(htons(port));
 	if (sfd < 0)
 		exit(EXIT_FAILURE);
+
+	if (!sighandler_init()) {
+		close(sfd);
+		exit(EXIT_FAILURE);
+	}
 
 	printf("Server listening on port %hu\n", port);
 

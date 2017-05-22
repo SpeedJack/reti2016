@@ -126,7 +126,9 @@ const char *message_type_name(enum msg_type type);
 void delete_message(void *msg);
 
 struct message *read_message(int sockfd);
+struct message *read_message_async(int sockfd, bool *noblock);
 struct message *read_udp_message(int sockfd);
+struct message *read_udp_message_async(int sockfd, bool *noblock);
 struct message *read_message_type(int sockfd, enum msg_type type);
 
 bool send_req_login(int sockfd, const char *username, in_port_t port);
