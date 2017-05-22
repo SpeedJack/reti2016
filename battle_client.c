@@ -881,11 +881,11 @@ int main(int argc, char **argv)
 	struct in_addr addr;
 #endif
 
-	if (argc > 3 || argc == 2) {
+	if (argc > 3) {
 		printf("Usage: %s <address> <port>\n", argv[0]);
 		exit(EXIT_SUCCESS);
 	}
-	if (argc < 2) {
+	if (argc < 3) {
 		if (inet_pton(ADDRESS_FAMILY, DEFAULT_SERVER_ADDRESS,
 					&addr) != 1) {
 			print_error("Invalid address DEFAULT_SERVER_ADDRESS",
