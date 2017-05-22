@@ -53,7 +53,8 @@ static void terminate_match(struct game_client *client, bool disconnected)
 		client->match->player2->sock : client->match->player1->sock;
 
 	if (client->match->awaiting_reply)
-		send_ans_play(sockfd, PLAY_DECLINE,
+		send_ans_play(sockfd, (client == client->match->player1) ?
+				PLAY_TIMEDOUT : PLAY_DECLINE,
 				client->address, client->port);
 	else
 		send_msg_endgame(sockfd, disconnected);
@@ -114,7 +115,7 @@ static void send_client_list(struct game_client *client)
 	size_t sz;
 
 	count = logged_client_count() - 1;
-	sz = MSG_BODY_SIZE(struct ans_who) + count * sizeof(struct who_player);
+	sz = count * sizeof(struct who_player);
 
 	players = malloc(sz);
 	if (!players) {
@@ -234,7 +235,6 @@ static void go_server(int sfd)
 {
 	fd_set readfds, _readfds;
 	int nfds;
-	struct timeval timeout;
 
 	FD_ZERO(&readfds);
 	FD_SET(sfd, &readfds);
@@ -244,6 +244,7 @@ static void go_server(int sfd)
 
 	for (;;) {
 		int fd, ready;
+		struct timeval timeout;
 
 		if (received_signal > 0) {
 			client_list_destroy();

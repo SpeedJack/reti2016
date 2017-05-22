@@ -3,8 +3,6 @@
 
 #include <netinet/in.h>
 
-#define	MSG_BODY_SIZE(tp)	sizeof(tp) - sizeof(struct msg_header)
-
 enum __attribute__ ((packed)) msg_type {
 	REQ_LOGIN	= 0x00,
 	ANS_LOGIN	= 0xF1,
@@ -38,13 +36,6 @@ enum __attribute__ ((packed)) play_response {
 	PLAY_INVALID_OPPONENT,
 	PLAY_OPPONENT_IN_GAME,
 	PLAY_TIMEDOUT
-};
-
-enum cell_status { /* move to ... */
-	WATER,
-	BOAT,
-	MISSED,
-	SUNK
 };
 
 struct __attribute__ ((packed)) who_player {
@@ -93,7 +84,7 @@ struct __attribute__ ((packed)) req_play {
 
 struct __attribute__ ((packed)) req_play_ans {
 	struct msg_header header;
-	bool __attribute__ ((packed)) accept;
+	bool accept;
 };
 
 struct __attribute__ ((packed)) ans_play {
@@ -113,30 +104,30 @@ struct __attribute__ ((packed)) msg_ready {
 
 struct __attribute__ ((packed)) msg_shot {
 	struct msg_header header;
-	struct {
-		char x;
-		char y;
-	} __attribute__ ((packed)) coords;
+	unsigned int row;
+	unsigned int col;
 };
 
 struct __attribute__ ((packed)) msg_result {
 	struct msg_header header;
-	unsigned char result; /* from enum cell_status */
+	bool hit;
 };
 
 struct __attribute__ ((packed)) msg_endgame {
 	struct msg_header header;
-	bool disconnected __attribute__ ((packed));
+	bool disconnected;
 };
 
 struct __attribute__ ((packed)) ans_badreq {
 	struct msg_header header;
 };
 
-struct message *read_message(int sockfd);
-struct message *read_message_type(int sockfd, enum msg_type type);
-void delete_message(void *msg);
 const char *message_type_name(enum msg_type type);
+void delete_message(void *msg);
+
+struct message *read_message(int sockfd);
+struct message *read_udp_message(int sockfd);
+struct message *read_message_type(int sockfd, enum msg_type type);
 
 bool send_req_login(int sockfd, const char *username, in_port_t port);
 bool send_ans_login(int sockfd, enum login_response response);
@@ -153,4 +144,8 @@ bool send_ans_play(int sockfd, enum play_response response,
 #endif
 bool send_msg_endgame(int sockfd, bool disconnected);
 bool send_ans_badreq(int sockfd);
+bool send_msg_ready(int sockfd, struct sockaddr_storage *dest);
+bool send_msg_shot(int sockfd, struct sockaddr_storage *dest,
+		unsigned int row, unsigned int col);
+bool send_msg_result(int sockfd, struct sockaddr_storage *dest, bool hit);
 #endif

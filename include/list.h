@@ -3,10 +3,10 @@
 
 #include <stddef.h>
 
-#define LIST_INIT(list, tp)	do {\
-		(list)->type = tp;\
-		(list)->head = NULL;\
-		(list)->cur = NULL;\
+#define LIST_INIT(_lst, _tp)	do {\
+		(_lst)->type = _tp;\
+		(_lst)->head = NULL;\
+		(_lst)->cur = NULL;\
 	} while(0)
 
 enum key_type { TP_INT, TP_STR };

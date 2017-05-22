@@ -122,13 +122,10 @@ bool read_socket(int sockfd, void *buf, size_t len)
 	for (left = (ssize_t)len, b = (char *)buf; left;
 			b += ret, left -= ret) {
 		ret = recv(sockfd, b, (size_t)left, MSG_WAITALL);
-		if (ret < 0) { /* TODO: handle different errors */
+		if (ret < 0)
 			print_error("recv", errno);
+		if (ret <= 0)
 			return false;
-		}
-		if (ret == 0) { /* client closed socket?? */
-			return false;
-		}
 	}
 	return true;
 }
@@ -142,8 +139,45 @@ bool write_socket(int sockfd, const void *buf, size_t len)
 	for (left = (ssize_t)len, b = (char *)buf; left;
 			b += ret, left -= ret) {
 		ret = send(sockfd, b, (size_t)left, 0);
-		if (ret < 0) { /* TODO: handle different errors */
+		if (ret < 0) {
 			print_error("send", errno);
+			return false;
+		}
+	}
+	return true;
+}
+
+bool read_udp_socket(int sockfd, void *buf, size_t len, bool peek)
+{
+	ssize_t left, ret;
+	char *b;
+
+	errno = 0;
+	for (left = (ssize_t)len, b = (char *)buf; left;
+			b += ret, left -= ret) {
+		ret = recvfrom(sockfd, b, (size_t)left, peek ? MSG_PEEK : 0,
+				NULL, NULL);
+		if (ret < 0)
+			print_error("recvfrom", errno);
+		if (ret <= 0)
+			return false;
+	}
+	return true;
+}
+
+bool write_udp_socket(int sockfd, struct sockaddr_storage *dest,
+		const void *buf, size_t len)
+{
+	ssize_t left, ret;
+	char *b;
+
+	errno = 0;
+	for (left = (ssize_t)len, b = (char *)buf; left;
+			b += ret, left -= ret) {
+		ret = sendto(sockfd, b, (size_t)left, 0,
+				(struct sockaddr *)dest, STRUCT_SOCKADDR_SIZE);
+		if (ret < 0) {
+			print_error("sendto", errno);
 			return false;
 		}
 	}
@@ -186,6 +220,26 @@ bool get_network_address(const char *src, struct in_addr *dst)
 		return false;
 	}
 	return true;
+}
+
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
+void fill_sockaddr(struct sockaddr_storage *ss,
+		struct in6_addr address, in_port_t port)
+#else
+void fill_sockaddr(struct sockaddr_storage *ss,
+		struct in_addr address, in_port_t port)
+#endif
+{
+	ss->ss_family = ADDRESS_FAMILY;
+#if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
+	memcpy(&((struct sockaddr_in6 *)ss)->sin6_addr,
+			&address, sizeof(struct in6_addr));
+	((struct sockaddr_in6 *)ss)->sin6_port = port;
+#else
+	memcpy(&((struct sockaddr_in *)ss)->sin_addr,
+			&address, sizeof(struct in_addr));
+	((struct sockaddr_in *)ss)->sin_port = port;
+#endif
 }
 
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
