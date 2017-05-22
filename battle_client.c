@@ -289,7 +289,7 @@ static void process_msg_result(struct msg_result *msg)
 		return;
 
 	printf("%s says: %s\n", game.opponent.username, msg->hit ?
-			"hit! :-)" : "missed. :-(");
+			"hit! :-)" : "miss. :-(");
 
 	game.opponent.table[game.fired_row][game.fired_col] =
 		msg->hit ? CELL_SUNK : CELL_MISS;
@@ -325,7 +325,7 @@ static void process_msg_shot(struct msg_shot *msg)
 
 	printf("%s fires %c%d. %s\n", game.opponent.username,
 			MIN_ROW_LETTER + msg->row, MIN_COL_NUMBER + msg->col,
-			hit ? "Hit. :-(" : "Missed! :-)");
+			hit ? "Hit. :-(" : "Miss! :-)");
 	game.my.table[msg->row][msg->col] = hit ? CELL_SUNK : CELL_MISS;
 
 	if (hit && game_lost()) {
