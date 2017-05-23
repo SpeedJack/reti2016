@@ -37,14 +37,16 @@ enum game_cell {
 
 static int server_sock;
 static int game_sock;
-static time_t last_input;
+static time_t last_input; /* last input/UDP message time. Used for game
+				timeout */
 
 static struct {
 	enum game_status status;
 	struct {
 		char username[MAX_USERNAME_LENGTH];
 		enum game_cell table[GAME_TABLE_ROWS][GAME_TABLE_COLS];
-		bool initiator;
+		bool initiator; /* true if this player is the initiator of the
+					match (has issued !connect) */
 	} my;
 	struct {
 		char username[MAX_USERNAME_LENGTH];
@@ -54,7 +56,8 @@ static struct {
 	struct {
 		unsigned int row;
 		unsigned int col;
-	} fired;
+	} fired; /* used by process_msg_result to register the result of the
+			last shot */
 } game;
 
 static inline void show_help()
@@ -71,10 +74,6 @@ static inline void show_help()
 				"!disconnect --> disconnects from the game\n"
 				"!shot square --> shots the specified square\n"
 				"!show --> shows the current game table");
-}
-
-static inline void show_prompt()
-{
 }
 
 static inline void print_cell_symbol(enum game_cell cell)
@@ -97,6 +96,10 @@ static inline void print_cell_symbol(enum game_cell cell)
 	}
 }
 
+/*
+ * Informs the player that the game is over because the opponent has
+ * disconnected or all his ships have been sunk.
+ */
 static void process_msg_endgame(struct msg_endgame *msg)
 {
 	if (game.status == GAME_DISCONNECTED || game.status == GAME_SETUP)
@@ -114,6 +117,9 @@ static void process_msg_endgame(struct msg_endgame *msg)
 	game.status = GAME_DISCONNECTED;
 }
 
+/*
+ * Shows and register the result of a !shot
+ */
 static void process_msg_result(struct msg_result *msg)
 {
 	printf("%s says: %s\n", game.opponent.username, msg->hit ?
@@ -125,6 +131,9 @@ static void process_msg_result(struct msg_result *msg)
 	game.status = GAME_OPPONENT_TURN;
 }
 
+/*
+ * Checks if all ships have been sunk.
+ */
 static inline bool game_lost()
 {
 	bool lost;
@@ -142,6 +151,9 @@ static inline bool game_lost()
 	return lost;
 }
 
+/*
+ * The opponent shots. This function answers with the result.
+ */
 static void process_msg_shot(struct msg_shot *msg)
 {
 	bool hit;
@@ -170,6 +182,11 @@ static void process_msg_shot(struct msg_shot *msg)
 	}
 }
 
+/*
+ * Extract the cell coords (row, col) from the null-terminated string pointed
+ * by buf. buf must contains the cell in the format <row-letter><col-number>.
+ * Otherwise an error is displayed and false is returned.
+ */
 static bool get_cell(char *buf, int *row, int *col)
 {
 	int ch;
@@ -214,6 +231,7 @@ static bool get_cell(char *buf, int *row, int *col)
 	return true;
 }
 
+/* !shot */
 static void shot_opponent_cell(char *buffer)
 {
 	int row, col;
@@ -234,6 +252,7 @@ static void shot_opponent_cell(char *buffer)
 	game.status = GAME_WAIT_RESULT;
 }
 
+/* !show */
 static void show_game_tables()
 {
 	int i, j;
@@ -276,6 +295,9 @@ static void show_game_tables()
 			SUNK_SYMBOL	" = SUNK SHIP (HIT)");
 }
 
+/*
+ * Asks the user to place his ships on the game table.
+ */
 static void place_ships()
 {
 	int i, len;
@@ -321,6 +343,9 @@ static void place_ships()
 	last_input = time(NULL);
 }
 
+/*
+ * Asks the users if he wants to play with <username>
+ */
 static bool ask_to_play(const char *username)
 {
 
@@ -378,6 +403,7 @@ static bool ask_to_play(const char *username)
 	exit(EXIT_SUCCESS);
 }
 
+/* Answers to a play request */
 static void process_play_request(struct req_play *msg)
 {
 	struct ans_play *ans;
@@ -425,6 +451,7 @@ static void process_play_request(struct req_play *msg)
 	delete_message(ans);
 }
 
+/* !connect */
 static void send_play_request(const char *username)
 {
 	struct ans_play *ans;
@@ -471,6 +498,7 @@ static void send_play_request(const char *username)
 	delete_message(ans);
 }
 
+/* !who */
 static void print_player_list()
 {
 #define _STRINGIZE(_a) #_a
@@ -529,6 +557,7 @@ static void print_player_list()
 	delete_message(ans);
 }
 
+/* game message dispatch */
 static bool get_opponent_message()
 {
 	struct message *msg;
@@ -572,6 +601,7 @@ static bool get_opponent_message()
 	return true;
 }
 
+/* server message dispatch */
 static bool get_server_message()
 {
 	struct message *msg;
@@ -598,6 +628,7 @@ static bool get_server_message()
 	return true;
 }
 
+/* game mode commands dispatch */
 static void process_game_command(const char *cmd, char *args)
 {
 	if (strcasecmp(cmd, "!help") == 0) {
@@ -621,6 +652,7 @@ static void process_game_command(const char *cmd, char *args)
 	putchar('\n');
 }
 
+/* normal mode commands dispatch */
 static void process_std_command(const char *cmd, const char *args)
 {
 	if (strcasecmp(cmd, "!help") == 0) {
@@ -645,6 +677,7 @@ static void process_std_command(const char *cmd, const char *args)
 	putchar('\n');
 }
 
+/* all commands dispatch */
 static void process_command()
 {
 	char buffer[COMMAND_BUFFER_SIZE];
@@ -678,6 +711,9 @@ static void process_command()
 		flush_stdin();
 }
 
+/*
+ * Client main cycle.
+ */
 static void wait_for_input()
 {
 	fd_set readfds, _readfds;

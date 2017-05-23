@@ -24,6 +24,10 @@ static inline void close_range(int start, int stop)
 		close(start);
 }
 
+/*
+ * Removes all matches awaiting for response where the timeout is elapsed and
+ * sends a message to the involved clients informing them of the timeout.
+ */
 static void remove_elapsed_matches()
 {
 	struct game_client *p;
@@ -42,6 +46,10 @@ static void remove_elapsed_matches()
 		}
 }
 
+/*
+ * Deletes a match when a client disconnect from the match and informs the
+ * other client that the opponent has disconnected.
+ */
 static void terminate_match(struct game_client *client, bool disconnected)
 {
 	int sockfd;
@@ -62,6 +70,7 @@ static void terminate_match(struct game_client *client, bool disconnected)
 	delete_match(client->match);
 }
 
+/* Answer to a play request */
 static void process_play_req_answer(struct game_client *client,
 		struct req_play_ans *msg)
 {
@@ -84,6 +93,7 @@ static void process_play_req_answer(struct game_client *client,
 		delete_match(client->match);
 }
 
+/* !connect */
 static void process_play_request(struct game_client *client,
 		struct req_play *msg)
 {
@@ -107,6 +117,7 @@ static void process_play_request(struct game_client *client,
 	send_req_play(opponent->sock, client->username);
 }
 
+/* !who */
 static void send_client_list(struct game_client *client)
 {
 	int count, i;
@@ -177,6 +188,9 @@ static void do_login(struct game_client *client, struct req_login *msg)
 	send_ans_login(client->sock, res);
 }
 
+/*
+ * Dispatches a message to the correct function.
+ */
 static bool dispatch_message(struct game_client *client)
 {
 	struct message *msg;
@@ -214,6 +228,9 @@ static bool dispatch_message(struct game_client *client)
 	return true;
 }
 
+/*
+ * Accepts a new incoming connection.
+ */
 static int accept_connection(int sockfd)
 {
 	int connfd;
@@ -237,6 +254,9 @@ static int accept_connection(int sockfd)
 	return connfd;
 }
 
+/*
+ * Server main cycle.
+ */
 static void go_server(int sfd)
 {
 	fd_set readfds, _readfds;
