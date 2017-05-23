@@ -7,7 +7,7 @@
 #include "list.h"
 #include "match.h"
 
-static struct list_head *client_list = NULL; /* TODO: use a btree!! */
+static struct list_head *client_list = NULL;
 static struct list_head client_hashtable[HASHTABLE_SIZE];
 static unsigned int logged_count;
 
