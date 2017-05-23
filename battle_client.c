@@ -63,160 +63,13 @@ static inline void show_help()
 				"!quit --> disconnects and exits");
 }
 
-static bool ask_to_play(const char *username)
+static inline void show_prompt()
 {
-
-
-	do {
-		char c;
-		fd_set readfds;
-		int ready;
-
-		FD_ZERO(&readfds);
-		FD_SET(fileno(stdin), &readfds);
-		FD_SET(server_sock, &readfds);
-
-		printf("%s invited you to play a match. Accept? [Y/n] ",
-				username);
-		fflush(stdout);
-
-		errno = 0;
-		ready = select(server_sock + 1, &readfds, NULL, NULL, NULL);
-
-		if (ready == -1 && errno == EINTR) {
-			puts("\nExiting...");
-			break;
-		} else if (ready == -1) {
-			print_error("\nselect", errno);
-			break;
-		}
-
-		if (FD_ISSET(server_sock, &readfds)) {
-			putchar('\n');
-			if (!bytes_available(server_sock)) {
-				printf("The server has closed the connection.\n");
-				break;
-			}
-			return false;
-		}
-
-		c = get_character();
-
-		switch (c) {
-		case 'y':
-		case 'Y':
-		case '\n':
-			return true;
-		case 'n':
-		case 'N':
-			return false;
-		default:
-			print_error("Invalid answer.", 0);
-		}
-	} while (1);
-
-	close(game.sock);
-	close(server_sock);
-	exit(EXIT_SUCCESS);
-}
-
-static int ask_username(char *username)
-{
-	int len;
-
-	do {
-		fputs("Insert your username: ", stdout);
-		fflush(stdout);
-		len = get_line(username, MAX_USERNAME_SIZE);
-
-		if (!valid_username(username) || len > MAX_USERNAME_LENGTH) {
-			printf_error("Invalid username. Username must be at least %d characters and less than %d characters and should countain only these characters:\n%s",
-					MIN_USERNAME_LENGTH,
-					MAX_USERNAME_LENGTH,
-					USERNAME_ALLOWED_CHARS);
-			continue;
-		}
-
-		return len;
-	} while (1);
-}
-
-static in_port_t ask_port()
-{
-	uint16_t port;
-	in_port_t net_port;
-
-	do {
-		printf("Insert your UDP port (number in range %d-%d): ",
-				MIN_UDP_PORT_NUMBER, MAX_UDP_PORT_NUMBER);
-		fflush(stdout);
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wtype-limits"
-		if (!get_uint16(&port) || port < MIN_UDP_PORT_NUMBER ||
-				port > MAX_UDP_PORT_NUMBER) {
-#pragma GCC diagnostic pop
-			printf_error("Invalid port. Port must be an integer value in the range %d-%d.",
-					MIN_UDP_PORT_NUMBER,
-					MAX_UDP_PORT_NUMBER);
-			continue;
-		}
-
-		net_port = htons(port);
-
-		if (-1 == (game.sock = open_local_port(net_port))) {
-			print_error("Can not open this port.", 0);
-			continue;
-		}
-
-		return net_port;
-	} while (1);
-}
-
-static bool do_login()
-{
-	in_port_t port;
-	struct ans_login *ans;
-
-	do {
-		ask_username(game.my.username);
-		port = ask_port();
-
-		if (!send_req_login(server_sock, game.my.username, port))
-				return false;
-
-		ans = (struct ans_login *)read_message_type(server_sock,
-				ANS_LOGIN);
-		if (!ans)
-			return false;
-
-		if (ans->response == LOGIN_OK)
-			break;
-
-		switch (ans->response) {
-		case LOGIN_INVALID_NAME:
-			printf_error("Invalid username. Username must be at least %d characters and less than %d characters and should countain only these characters:\n%s",
-					MIN_USERNAME_LENGTH,
-					MAX_USERNAME_LENGTH,
-					USERNAME_ALLOWED_CHARS);
-			break;
-		case LOGIN_NAME_INUSE:
-			print_error("This username is already in use by another player. Please choose another username.",
-					0);
-			break;
-		default:
-			print_error("Invalid response from server.", 0);
-			delete_message(ans);
-			return false;
-		}
-
-		delete_message(ans);
-		close(game.sock);
-	} while (1);
-
-	delete_message(ans);
-	printf("Successfully logged-in as %s.\n", game.my.username);
-
-	return true;
+	if (game.active && game.my_turn)
+		fputs("# ", stdout);
+	else if (!game.active)
+		fputs("> ", stdout);
+	fflush(stdout);
 }
 
 static inline void print_cell_symbol(enum game_cell cell)
@@ -239,48 +92,19 @@ static inline void print_cell_symbol(enum game_cell cell)
 	}
 }
 
-static void show_game_tables()
+static void process_msg_endgame(struct msg_endgame *msg)
 {
-	int i, j;
-	int len;
+	if (!game.active)
+		return;
 
-#define MIN_NUMBER(_a,_b) ((_a) < (_b) ? (_a) : (_b))
-	len = strlen(game.my.username);
-	len = MIN_NUMBER(len, GAME_TABLE_COLS * 3 + 4);
+	if (msg->disconnected)
+		printf("%s has disconnected!\n",
+				game.opponent.username);
+	else
+		printf("You have sunk all %s's ships! YOU WON!\n",
+				game.opponent.username);
 
-	printf("\n%s", game.my.username);
-	for (i = 0; i < (GAME_TABLE_COLS * 3 + 4) - len; i++)
-		printf(" ");
-	printf("\t\t%s", game.opponent.username);
-
-	printf("\n X |");
-	for (j = 0; j < GAME_TABLE_COLS; j++)
-		printf("  %d", j + MIN_COL_NUMBER);
-	printf("\t\t X |");
-	for (j = 0; j < GAME_TABLE_COLS; j++)
-		printf("  %d", j + MIN_COL_NUMBER);
-	printf("\n---|");
-	for (j = 0; j < GAME_TABLE_COLS; j++)
-		printf("---");
-	printf("\t\t---|");
-	for (j = 0; j < GAME_TABLE_COLS; j++)
-		printf("---");
-
-	for (i = 0; i < GAME_TABLE_ROWS; i++) {
-		printf("\n %c |", MIN_ROW_LETTER + i);
-		for (j = 0; j < GAME_TABLE_COLS; j++)
-			print_cell_symbol(game.my.table[i][j]);
-		printf("\t\t %c |", MIN_ROW_LETTER + i);
-		for (j = 0; j < GAME_TABLE_COLS; j++)
-			print_cell_symbol(game.opponent.table[i][j]);
-	}
-
-	printf("\n\n\n"
-			"%s = FREE (WATER) / UNKNOWN\n"
-			"%s = SHIP\n"
-			"%s = MISS\n"
-			"%s = SUNK SHIP\n",
-			WATER_SYMBOL, SHIP_SYMBOL, MISS_SYMBOL, SUNK_SYMBOL);
+	game.active = false;
 }
 
 static void process_msg_result(struct msg_result *msg)
@@ -400,6 +224,50 @@ static void shot_opponent_cell(char *buffer)
 	game.my_turn = false;
 }
 
+static void show_game_tables()
+{
+	int i, j;
+	int len;
+
+#define MIN_NUMBER(_a,_b) ((_a) < (_b) ? (_a) : (_b))
+	len = strlen(game.my.username);
+	len = MIN_NUMBER(len, GAME_TABLE_COLS * 3 + 4);
+
+	printf("\n%s", game.my.username);
+	for (i = 0; i < (GAME_TABLE_COLS * 3 + 4) - len; i++)
+		printf(" ");
+	printf("\t\t%s", game.opponent.username);
+
+	printf("\n X |");
+	for (j = 0; j < GAME_TABLE_COLS; j++)
+		printf("  %d", j + MIN_COL_NUMBER);
+	printf("\t\t X |");
+	for (j = 0; j < GAME_TABLE_COLS; j++)
+		printf("  %d", j + MIN_COL_NUMBER);
+	printf("\n---|");
+	for (j = 0; j < GAME_TABLE_COLS; j++)
+		printf("---");
+	printf("\t\t---|");
+	for (j = 0; j < GAME_TABLE_COLS; j++)
+		printf("---");
+
+	for (i = 0; i < GAME_TABLE_ROWS; i++) {
+		printf("\n %c |", MIN_ROW_LETTER + i);
+		for (j = 0; j < GAME_TABLE_COLS; j++)
+			print_cell_symbol(game.my.table[i][j]);
+		printf("\t\t %c |", MIN_ROW_LETTER + i);
+		for (j = 0; j < GAME_TABLE_COLS; j++)
+			print_cell_symbol(game.opponent.table[i][j]);
+	}
+
+	printf("\n\n\n"
+			"%s = FREE (WATER) / UNKNOWN\n"
+			"%s = SHIP\n"
+			"%s = MISS\n"
+			"%s = SUNK SHIP\n",
+			WATER_SYMBOL, SHIP_SYMBOL, MISS_SYMBOL, SUNK_SYMBOL);
+}
+
 static void place_ships()
 {
 	int i, len;
@@ -447,77 +315,61 @@ static void place_ships()
 	last_input = time(NULL);
 }
 
-static void process_msg_endgame(struct msg_endgame *msg)
+static bool ask_to_play(const char *username)
 {
-	if (!game.active)
-		return;
 
-	if (msg->disconnected)
-		printf("%s has disconnected!\n",
-				game.opponent.username);
-	else
-		printf("You have sunk all %s's ships! YOU WON!\n",
-				game.opponent.username);
 
-	game.active = false;
-}
+	do {
+		char c;
+		fd_set readfds;
+		int ready;
 
-static void print_player_list()
-{
-#define _STRINGIZE(_a) #_a
-#define STRINGIZE(_a) _STRINGIZE(_a)
+		FD_ZERO(&readfds);
+		FD_SET(fileno(stdin), &readfds);
+		FD_SET(server_sock, &readfds);
 
-	struct ans_who *ans;
-	int i, count;
+		printf("%s invited you to play a match. Accept? [Y/n] ",
+				username);
+		fflush(stdout);
 
-	if (!send_req_who(server_sock))
-		return;
+		errno = 0;
+		ready = select(server_sock + 1, &readfds, NULL, NULL, NULL);
 
-	ans = (struct ans_who *)read_message(server_sock);
-	if (!ans)
-		return;
-
-	count = ans->header.length / sizeof(struct who_player);
-
-	if (count == 0) {
-		puts("There are no connected players.");
-		delete_message(ans);
-		return;
-	}
-
-	printf("\n%-" STRINGIZE(MAX_USERNAME_LENGTH) "s\t"
-			"%" STRINGIZE(WHO_STATUS_LENGTH) "s\n\n",
-			"USERNAME", "STATUS");
-	for (i = 0; i < count; i++) {
-		char status[WHO_STATUS_BUFFER_SIZE];
-
-		switch (ans->players[i].status) {
-		case PLAYER_AWAITING_REPLY:
-			fputs(COLOR_PLAYER_AWAITING, stdout);
-			snprintf(status, WHO_STATUS_BUFFER_SIZE,
-					"AWAITING REPLY (%s)",
-					ans->players[i].opponent);
+		if (ready == -1 && errno == EINTR) {
+			puts("\nExiting...");
 			break;
-		case PLAYER_IN_GAME:
-			fputs(COLOR_PLAYER_IN_GAME, stdout);
-			snprintf(status, WHO_STATUS_BUFFER_SIZE,
-					"IN GAME (%s)",
-					ans->players[i].opponent);
+		} else if (ready == -1) {
+			print_error("\nselect", errno);
 			break;
-		case PLAYER_IDLE:
-		default:
-			fputs(COLOR_PLAYER_IDLE, stdout);
-			strcpy(status, "IDLE");
 		}
 
-		printf("%-" STRINGIZE(MAX_USERNAME_LENGTH) "s\t%"
-				STRINGIZE(WHO_STATUS_LENGTH) "s\n",
-				ans->players[i].username, status);
+		if (FD_ISSET(server_sock, &readfds)) {
+			putchar('\n');
+			if (!bytes_available(server_sock)) {
+				printf("The server has closed the connection.\n");
+				break;
+			}
+			return false;
+		}
 
-		fputs(COLOR_RESET, stdout);
-	}
+		c = get_character();
 
-	delete_message(ans);
+		switch (c) {
+		case 'y':
+		case 'Y':
+		case '\n':
+			return true;
+		case 'n':
+		case 'N':
+			return false;
+		default:
+			print_error("Invalid answer.", 0);
+		}
+	} while (1);
+
+	close(game.sock);
+	close(server_sock);
+	exit(EXIT_SUCCESS);
 }
 
 static void process_play_request(struct req_play *msg)
@@ -609,109 +461,62 @@ static void send_play_request(const char *username)
 	delete_message(ans);
 }
 
-static void process_std_command(const char *cmd, const char *args)
+static void print_player_list()
 {
-	if (strcasecmp(cmd, "!help") == 0) {
-		show_help();
-	} else if (strcasecmp(cmd, "!who") == 0) {
-		print_player_list();
-	} else if (strcasecmp(cmd, "!connect") == 0) {
-		if (args == NULL || !valid_username(args))
-			print_error("!connect requires a valid opponent name as argument.",
-					0);
-		else
-			send_play_request(args);
-	} else if (strcasecmp(cmd, "!quit") == 0) {
-		puts("Disconnecting... Bye!");
-		close(game.sock);
-		close(server_sock);
-		exit(EXIT_SUCCESS);
-	} else {
-		printf_error("Invalid command %s.", cmd);
-	}
-	putchar('\n');
-}
+#define _STRINGIZE(_a) #_a
+#define STRINGIZE(_a) _STRINGIZE(_a)
 
-static void process_game_command(const char *cmd, char *args)
-{
-	if (strcasecmp(cmd, "!help") == 0) {
-		show_help();
-		putchar('\n');
-	} else if (strcasecmp(cmd, "!shot") == 0) {
-		if (args == NULL)
-			print_error("!shot requires a valid game table square as argument.\n",
-					0);
-		else
-			shot_opponent_cell(args);
-	} else if (strcasecmp(cmd, "!show") == 0) {
-		show_game_tables();
-		putchar('\n');
-	} else if (strcasecmp(cmd, "!disconnect") == 0) {
-		send_msg_endgame(server_sock, true);
-		puts("Successfully disconnected from the game.");
-		game.active = false;
-		putchar('\n');
-	} else {
-		printf_error("Invalid command %s.", cmd);
-		putchar('\n');
-	}
-}
+	struct ans_who *ans;
+	int i, count;
 
-static void process_command()
-{
-	char buffer[COMMAND_BUFFER_SIZE];
-	char *cmd;
-	char *args;
-	int len;
-
-	len = get_line(buffer, COMMAND_BUFFER_SIZE);
-	if (!len)
+	if (!send_req_who(server_sock))
 		return;
-	if (len > COMMAND_BUFFER_SIZE - 1) {
-		print_error("Too long input.\n", 0);
+
+	ans = (struct ans_who *)read_message(server_sock);
+	if (!ans)
+		return;
+
+	count = ans->header.length / sizeof(struct who_player);
+
+	if (count == 0) {
+		puts("There are no connected players.");
+		delete_message(ans);
 		return;
 	}
 
-	cmd = trim_white_spaces(buffer);
-	if (*cmd != '!') {
-		printf_error("Invalid command %s.\n", cmd);
-		return;
+	printf("\n%-" STRINGIZE(MAX_USERNAME_LENGTH) "s\t"
+			"%" STRINGIZE(WHO_STATUS_LENGTH) "s\n\n",
+			"USERNAME", "STATUS");
+	for (i = 0; i < count; i++) {
+		char status[WHO_STATUS_BUFFER_SIZE];
+
+		switch (ans->players[i].status) {
+		case PLAYER_AWAITING_REPLY:
+			fputs(COLOR_PLAYER_AWAITING, stdout);
+			snprintf(status, WHO_STATUS_BUFFER_SIZE,
+					"AWAITING REPLY (%s)",
+					ans->players[i].opponent);
+			break;
+		case PLAYER_IN_GAME:
+			fputs(COLOR_PLAYER_IN_GAME, stdout);
+			snprintf(status, WHO_STATUS_BUFFER_SIZE,
+					"IN GAME (%s)",
+					ans->players[i].opponent);
+			break;
+		case PLAYER_IDLE:
+		default:
+			fputs(COLOR_PLAYER_IDLE, stdout);
+			strcpy(status, "IDLE");
+		}
+
+		printf("%-" STRINGIZE(MAX_USERNAME_LENGTH) "s\t%"
+				STRINGIZE(WHO_STATUS_LENGTH) "s\n",
+				ans->players[i].username, status);
+
+		fputs(COLOR_RESET, stdout);
 	}
 
-	args = split_cmd_args(cmd);
-	if (args && *args == '\0')
-		args = NULL;
-
-	if (game.active)
-		process_game_command(cmd, args);
-	else
-		process_std_command(cmd, args);
-}
-
-static bool get_server_message()
-{
-	struct message *msg;
-
-	msg = read_message(server_sock);
-	if (!msg)
-		return false;
-
-	switch (msg->header.type) {
-	case REQ_PLAY:
-		putchar('\n');
-		process_play_request((struct req_play *)msg);
-		break;
-	case MSG_ENDGAME:
-		process_msg_endgame((struct msg_endgame *)msg);
-		break;
-	default:
-		print_error("Received an invalid message from server.", 0);
-		delete_message(msg);
-		return false;
-	}
-
-	delete_message(msg);
-	return true;
+	delete_message(ans);
 }
 
 static bool get_opponent_message()
@@ -750,13 +555,109 @@ static bool get_opponent_message()
 	return true;
 }
 
-static inline void show_prompt()
+static bool get_server_message()
 {
-	if (game.active && game.my_turn)
-		fputs("# ", stdout);
-	else if (!game.active)
-		fputs("> ", stdout);
-	fflush(stdout);
+	struct message *msg;
+
+	msg = read_message(server_sock);
+	if (!msg)
+		return false;
+
+	switch (msg->header.type) {
+	case REQ_PLAY:
+		putchar('\n');
+		process_play_request((struct req_play *)msg);
+		break;
+	case MSG_ENDGAME:
+		process_msg_endgame((struct msg_endgame *)msg);
+		break;
+	default:
+		print_error("Received an invalid message from server.", 0);
+		delete_message(msg);
+		return false;
+	}
+
+	delete_message(msg);
+	return true;
+}
+
+static void process_game_command(const char *cmd, char *args)
+{
+	if (strcasecmp(cmd, "!help") == 0) {
+		show_help();
+		putchar('\n');
+	} else if (strcasecmp(cmd, "!shot") == 0) {
+		if (args == NULL)
+			print_error("!shot requires a valid game table square as argument.\n",
+					0);
+		else
+			shot_opponent_cell(args);
+	} else if (strcasecmp(cmd, "!show") == 0) {
+		show_game_tables();
+		putchar('\n');
+	} else if (strcasecmp(cmd, "!disconnect") == 0) {
+		send_msg_endgame(server_sock, true);
+		puts("Successfully disconnected from the game.");
+		game.active = false;
+		putchar('\n');
+	} else {
+		printf_error("Invalid command %s.", cmd);
+		putchar('\n');
+	}
+}
+
+static void process_std_command(const char *cmd, const char *args)
+{
+	if (strcasecmp(cmd, "!help") == 0) {
+		show_help();
+	} else if (strcasecmp(cmd, "!who") == 0) {
+		print_player_list();
+	} else if (strcasecmp(cmd, "!connect") == 0) {
+		if (args == NULL || !valid_username(args))
+			print_error("!connect requires a valid opponent name as argument.",
+					0);
+		else
+			send_play_request(args);
+	} else if (strcasecmp(cmd, "!quit") == 0) {
+		puts("Disconnecting... Bye!");
+		close(game.sock);
+		close(server_sock);
+		exit(EXIT_SUCCESS);
+	} else {
+		printf_error("Invalid command %s.", cmd);
+	}
+	putchar('\n');
+}
+
+static void process_command()
+{
+	char buffer[COMMAND_BUFFER_SIZE];
+	char *cmd;
+	char *args;
+	int len;
+
+	len = get_line(buffer, COMMAND_BUFFER_SIZE);
+	if (!len)
+		return;
+	if (len > COMMAND_BUFFER_SIZE - 1) {
+		print_error("Too long input.\n", 0);
+		return;
+	}
+
+	cmd = trim_white_spaces(buffer);
+	if (*cmd != '!') {
+		printf_error("Invalid command %s.\n", cmd);
+		return;
+	}
+
+	args = split_cmd_args(cmd);
+	if (args && *args == '\0')
+		args = NULL;
+
+	if (game.active)
+		process_game_command(cmd, args);
+	else
+		process_std_command(cmd, args);
 }
 
 static void wait_for_input()
@@ -781,13 +682,10 @@ static void wait_for_input()
 			return;
 
 /* FIXME: sometimes the prompt doesn't shows when it should */
-		if (!select_timeout &&
-				(!game.active ||
-				 (game.my_turn && game.opponent.ready)
-					) &&
+		if (!select_timeout && (!game.active ||
+				(game.my_turn && game.opponent.ready)) &&
 				!(!game.active &&
-					FD_ISSET(game.sock, &_readfds))
-				) {
+					FD_ISSET(game.sock, &_readfds))) {
 			if (!FD_ISSET(fileno(stdin), &_readfds))
 				putchar('\n');
 			show_prompt();
@@ -871,6 +769,105 @@ static void wait_for_input()
 			}
 		}
 	}
+}
+
+static in_port_t ask_port()
+{
+	uint16_t port;
+	in_port_t net_port;
+
+	do {
+		printf("Insert your UDP port (number in range %d-%d): ",
+				MIN_UDP_PORT_NUMBER, MAX_UDP_PORT_NUMBER);
+		fflush(stdout);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtype-limits"
+		if (!get_uint16(&port) || port < MIN_UDP_PORT_NUMBER ||
+				port > MAX_UDP_PORT_NUMBER) {
+#pragma GCC diagnostic pop
+			printf_error("Invalid port. Port must be an integer value in the range %d-%d.",
+					MIN_UDP_PORT_NUMBER,
+					MAX_UDP_PORT_NUMBER);
+			continue;
+		}
+
+		net_port = htons(port);
+
+		if (-1 == (game.sock = open_local_port(net_port))) {
+			print_error("Can not open this port.", 0);
+			continue;
+		}
+
+		return net_port;
+	} while (1);
+}
+
+static int ask_username(char *username)
+{
+	int len;
+
+	do {
+		fputs("Insert your username: ", stdout);
+		fflush(stdout);
+		len = get_line(username, MAX_USERNAME_SIZE);
+
+		if (!valid_username(username) || len > MAX_USERNAME_LENGTH) {
+			printf_error("Invalid username. Username must be at least %d characters and less than %d characters and should countain only these characters:\n%s",
+					MIN_USERNAME_LENGTH,
+					MAX_USERNAME_LENGTH,
+					USERNAME_ALLOWED_CHARS);
+			continue;
+		}
+
+		return len;
+	} while (1);
+}
+
+static bool do_login()
+{
+	in_port_t port;
+	struct ans_login *ans;
+
+	do {
+		ask_username(game.my.username);
+		port = ask_port();
+
+		if (!send_req_login(server_sock, game.my.username, port))
+				return false;
+
+		ans = (struct ans_login *)read_message_type(server_sock,
+				ANS_LOGIN);
+		if (!ans)
+			return false;
+
+		if (ans->response == LOGIN_OK)
+			break;
+
+		switch (ans->response) {
+		case LOGIN_INVALID_NAME:
+			printf_error("Invalid username. Username must be at least %d characters and less than %d characters and should countain only these characters:\n%s",
+					MIN_USERNAME_LENGTH,
+					MAX_USERNAME_LENGTH,
+					USERNAME_ALLOWED_CHARS);
+			break;
+		case LOGIN_NAME_INUSE:
+			print_error("This username is already in use by another player. Please choose another username.",
+					0);
+			break;
+		default:
+			print_error("Invalid response from server.", 0);
+			delete_message(ans);
+			return false;
+		}
+
+		delete_message(ans);
+		close(game.sock);
+	} while (1);
+
+	delete_message(ans);
+	printf("Successfully logged-in as %s.\n", game.my.username);
+
+	return true;
 }
 
 int main(int argc, char **argv)
