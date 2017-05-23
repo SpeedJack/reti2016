@@ -235,21 +235,21 @@ static void show_game_tables()
 
 	printf("\n%s", game.my.username);
 	for (i = 0; i < (GAME_TABLE_COLS * 3 + 4) - len; i++)
-		printf(" ");
+		putchar(' ');
 	printf("\t\t%s", game.opponent.username);
 
-	printf("\n X |");
+	fputs("\n X |", stdout);
 	for (j = 0; j < GAME_TABLE_COLS; j++)
 		printf("  %d", j + MIN_COL_NUMBER);
-	printf("\t\t X |");
+	fputs("\t\t X |", stdout);
 	for (j = 0; j < GAME_TABLE_COLS; j++)
 		printf("  %d", j + MIN_COL_NUMBER);
-	printf("\n---|");
+	fputs("\n---|", stdout);
 	for (j = 0; j < GAME_TABLE_COLS; j++)
-		printf("---");
-	printf("\t\t---|");
+		fputs("---", stdout);
+	fputs("\t\t---|", stdout);
 	for (j = 0; j < GAME_TABLE_COLS; j++)
-		printf("---");
+		fputs("---", stdout);
 
 	for (i = 0; i < GAME_TABLE_ROWS; i++) {
 		printf("\n %c |", MIN_ROW_LETTER + i);
@@ -260,12 +260,10 @@ static void show_game_tables()
 			print_cell_symbol(game.opponent.table[i][j]);
 	}
 
-	printf("\n\n\n"
-			"%s = FREE (WATER) / UNKNOWN\n"
-			"%s = SHIP\n"
-			"%s = MISS\n"
-			"%s = SUNK SHIP\n",
-			WATER_SYMBOL, SHIP_SYMBOL, MISS_SYMBOL, SUNK_SYMBOL);
+	puts("\n\n\n"	WATER_SYMBOL	" = FREE (WATER) / UNKNOWN\n"
+			SHIP_SYMBOL	" = SHIP\n"
+			MISS_SYMBOL	" = MISS\n"
+			SUNK_SYMBOL	" = SUNK SHIP (HIT)");
 }
 
 static void place_ships()
