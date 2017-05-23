@@ -3,8 +3,34 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "console.h"
 #include "game_client.h"
+
+struct match *add_match(struct game_client *p1, struct game_client *p2)
+{
+	struct match *m;
+
+	m = malloc(sizeof(struct match));
+	m->player1 = p1;
+	m->player2 = p2;
+	p1->match = m;
+	p2->match = m;
+	m->awaiting_reply = true;
+	m->request_time = time(NULL);
+	return m;
+}
+
+void delete_match(struct match *m)
+{
+	if (!m)
+		return;
+
+	m->player1->match = NULL;
+	m->player2->match = NULL;
+
+	free(m);
+}
 
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 struct game_client *create_client(const char *username, in_port_t in_port,
@@ -39,8 +65,13 @@ struct game_client *create_client(const char *username, in_port_t in_port,
 
 void delete_client(struct game_client *client)
 {
-	if (client)
-		free(client);
+	if (!client)
+		return;
+
+	if (client->match)
+		delete_match(client->match);
+
+	free(client);
 }
 
 bool valid_username(const char *username)

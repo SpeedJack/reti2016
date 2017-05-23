@@ -5,7 +5,6 @@
 #include "console.h"
 #include "hashtable.h"
 #include "list.h"
-#include "match.h"
 
 static struct list_head *client_list = NULL;
 static struct list_head client_hashtable[HASHTABLE_SIZE];
@@ -30,9 +29,6 @@ void client_list_init()
 
 void remove_client(struct game_client *client)
 {
-	if (client->match)
-		delete_match(client->match);
-
 	if (logged_in(client)) {
 		list_remove(client_list, (void *)client->username);
 		logged_count--;

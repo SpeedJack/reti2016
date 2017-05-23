@@ -2,7 +2,8 @@
 #define	_BATTLE_GAME_CLIENT_H
 
 #include <netinet/in.h>
-#include "match.h"
+
+struct match;
 
 struct game_client {
 	char username[MAX_USERNAME_SIZE];
@@ -15,6 +16,16 @@ struct game_client {
 	struct match *match;
 	int sock;
 };
+
+struct match {
+	struct game_client *player1;
+	struct game_client *player2;
+	bool awaiting_reply;
+	time_t request_time;
+};
+
+struct match *add_match(struct game_client *p1, struct game_client *p2);
+void delete_match(struct match *match);
 
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 struct game_client *create_client(const char *username, in_port_t in_port,
