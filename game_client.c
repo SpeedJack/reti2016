@@ -23,10 +23,12 @@ struct game_client *create_client(const char *username, in_port_t in_port,
 		exit(EXIT_FAILURE);
 	}
 
-	if (username)
+	if (username) {
 		strncpy(client->username, username, MAX_USERNAME_SIZE);
-	else
+		client->username[MAX_USERNAME_LENGTH] = '\0';
+	} else {
 		*client->username = '\0';
+	}
 	client->port = in_port;
 	client->address = in_addr;
 	client->match = NULL;

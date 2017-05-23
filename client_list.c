@@ -58,6 +58,7 @@ void login_client(struct game_client *client, const char *username,
 		in_port_t port)
 {
 	strncpy(client->username, username, MAX_USERNAME_SIZE);
+	client->username[MAX_USERNAME_LENGTH] = '\0';
 	client->port = port;
 	list_insert(client_list, client, (void *)client->username);
 	logged_count++;

@@ -278,7 +278,7 @@ static void show_game_tables()
 	printf("\n\n\n"
 			"%s = FREE (WATER) / UNKNOWN\n"
 			"%s = SHIP\n"
-			"%s = MISSED\n"
+			"%s = MISS\n"
 			"%s = SUNK SHIP\n",
 			WATER_SYMBOL, SHIP_SYMBOL, MISS_SYMBOL, SUNK_SYMBOL);
 }
@@ -549,6 +549,7 @@ static void process_play_request(struct req_play *msg)
 		printf("You are now playing with %s!\n", msg->opponent);
 		strncpy(game.opponent.username, msg->opponent,
 				MAX_USERNAME_SIZE);
+		game.opponent.username[MAX_USERNAME_LENGTH] = '\0';
 		fill_sockaddr(&game.opponent.sa, ans->address, ans->udp_port);
 		game.my_turn = true;
 		place_ships();
@@ -585,6 +586,7 @@ static void send_play_request(const char *username)
 	case PLAY_ACCEPT:
 		printf("%s accepted the invite to play!\n", username);
 		strncpy(game.opponent.username, username, MAX_USERNAME_SIZE);
+		game.opponent.username[MAX_USERNAME_LENGTH] = '\0';
 		fill_sockaddr(&game.opponent.sa, ans->address, ans->udp_port);
 		game.my_turn = false;
 		place_ships();

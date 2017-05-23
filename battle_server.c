@@ -130,6 +130,7 @@ static void send_client_list(struct game_client *client)
 			continue;
 
 		strncpy(players[i].username, p->username, MAX_USERNAME_SIZE);
+		players[i].username[MAX_USERNAME_LENGTH] = '\0';
 
 		players[i].status = PLAYER_IDLE;
 		if (p->match) {
@@ -143,6 +144,7 @@ static void send_client_list(struct game_client *client)
 				strncpy(players[i].opponent,
 						p->match->player1->username,
 						MAX_USERNAME_SIZE);
+			players[i].opponent[MAX_USERNAME_LENGTH] = '\0';
 		}
 		i++;
 	}
