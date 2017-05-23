@@ -6,12 +6,20 @@
 #include "console.h"
 #include "list.h"
 
+/*
+ * Represents a node of the list. obj points to the data and key points to the
+ * element used for sorting.
+ */
 struct list_node {
 	void *key;
 	void *obj;
 	struct list_node *next;
 };
 
+/*
+ * Compares two keys of the specified type (int or string). Returns zero if
+ * equal.
+ */
 static int compare_keys(enum key_type type, void *key1, void *key2)
 {
 	switch (type) {
@@ -23,6 +31,9 @@ static int compare_keys(enum key_type type, void *key1, void *key2)
 	}
 }
 
+/*
+ * Insert a new already allocated node in the list pointed by list.
+ */
 static void list_insert_node(struct list_head *list, struct list_node *node)
 {
 	struct list_node *prev;
@@ -45,6 +56,9 @@ static void list_insert_node(struct list_head *list, struct list_node *node)
 	prev->next = node;
 }
 
+/*
+ * Creates a new node and inserts it into the list pointed by list.
+ */
 void list_insert(struct list_head *list, void *obj, void *key)
 {
 	struct list_node *node;
@@ -65,6 +79,9 @@ void list_insert(struct list_head *list, void *obj, void *key)
 	list_insert_node(list, node);
 }
 
+/*
+ * Removes a node from the list and frees it.
+ */
 void *list_remove(struct list_head *list, void *key)
 {
 	struct list_node *prev;
@@ -98,6 +115,11 @@ void *list_remove(struct list_head *list, void *key)
 	return obj;
 }
 
+/*
+ * Search an element in the list pointed by list which key equals the key
+ * specified in the memory area pointed by the argument key. Returns NULL
+ * if there isn't a node with that key.
+ */
 void *list_search(struct list_head *list, void *key)
 {
 	struct list_node *p;

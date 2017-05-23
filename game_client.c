@@ -32,6 +32,9 @@ void delete_match(struct match *m)
 	free(m);
 }
 
+/*
+ * Creates a new client. If username is NULL, an empty username is used.
+ */
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 struct game_client *create_client(const char *username, in_port_t in_port,
 		struct in6_addr in_addr, int sock)

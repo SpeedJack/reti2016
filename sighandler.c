@@ -4,6 +4,7 @@
 #include "console.h"
 #include "sighandler.h"
 
+/* list of selected signals */
 static const int signums[] = {SIGHUP, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, 0};
 unsigned int received_signal = 0;
 
@@ -12,6 +13,9 @@ static void signal_handler(int signum)
 	received_signal = signum;
 }
 
+/*
+ * Set up the signal handler for all selected signals.
+ */
 bool sighandler_init()
 {
 	struct sigaction action;

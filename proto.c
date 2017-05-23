@@ -36,6 +36,9 @@ void delete_message(void *msg)
 		free(msg);
 }
 
+/*
+ * Checks if the header of the message is valid.
+ */
 static bool valid_message_header(struct msg_header mh)
 {
 	if (mh.magic[0] != 'B' || mh.magic[1] != 'P')
@@ -71,6 +74,10 @@ static bool valid_message_header(struct msg_header mh)
 	return false;
 }
 
+/*
+ * Dumps a message on the screen. This function is provided only if
+ * BATTLE_SERVER is defined.
+ */
 #ifdef	BATTLE_SERVER
 static void dump_message(struct message *msg, int sockfd, bool send)
 {
@@ -132,6 +139,11 @@ static void dump_message(struct message *msg, int sockfd, bool send)
 }
 #endif
 
+/*
+ * Reads an entire message from a socket. It returns leaving the buffer
+ * untouched if noblock points to true and the message is not entirely
+ * available.
+ */
 static struct message *_read_message(int sockfd, bool connected, bool *noblock)
 {
 	struct message *msg;
@@ -196,6 +208,9 @@ struct message *read_message(int sockfd)
 	return _read_message(sockfd, true, NULL);
 }
 
+/*
+ * Reads a message without blocking if it's not entirely available.
+ */
 struct message *read_message_async(int sockfd, bool *noblock)
 {
 	*noblock = true;
@@ -213,6 +228,9 @@ struct message *read_udp_message_async(int sockfd, bool *noblock)
 	return _read_message(sockfd, false, noblock);
 }
 
+/*
+ * Reads a message only if it is of the specified type.
+ */
 struct message *read_message_type(int sockfd, enum msg_type type)
 {
 	struct message *msg;
@@ -232,6 +250,9 @@ struct message *read_message_type(int sockfd, enum msg_type type)
 	return msg;
 }
 
+/*
+ * Writes a message to a socket.
+ */
 static bool _write_message(int sockfd, struct message *msg,
 		struct sockaddr_storage *dest)
 {
@@ -264,6 +285,9 @@ static inline bool write_udp_message(int sockfd, struct sockaddr_storage *dest,
 	return _write_message(sockfd, msg, dest);
 }
 
+/*
+ * These functions send different types of messages.
+ */
 bool send_req_login(int sockfd, const char *username, in_port_t port)
 {
 	struct req_login msg;

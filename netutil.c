@@ -9,15 +9,19 @@
 #include "console.h"
 #include "netutil.h"
 
-int set_nonblocking_socket(int fd)
+/*int set_nonblocking_socket(int fd)
 {
 	int flags;
 
 	if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
 		flags = 0;
 	return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
+}*/
 
+/*
+ * Open a new listening socket from any address on the port specified by port.
+ * The socked descriptor is returned.
+ */
 int listen_on_port(in_port_t port)
 {
 	struct sockaddr_storage sa;
@@ -58,6 +62,11 @@ exit_close_sock:
 	return -1;
 }
 
+/*
+ * Accept a new connection on the listening socket specified by sockfd. Returns
+ * the newly created connection socket and saves the client address in the
+ * memory area pointed by sa.
+ */
 int accept_socket_connection(int sockfd, struct sockaddr_storage *sa)
 {
 	int connfd;
@@ -73,6 +82,10 @@ int accept_socket_connection(int sockfd, struct sockaddr_storage *sa)
 	return connfd;
 }
 
+/*
+ * Creates and binds an UDP socket to the port specified by port. Returns the
+ * socket descriptor.
+ */
 int open_local_port(in_port_t port)
 {
 	int lsock;
@@ -104,6 +117,9 @@ int open_local_port(in_port_t port)
 	return lsock;
 }
 
+/*
+ * Returns how many bytes are available to read in the specified socket.
+ */
 int bytes_available(int fd)
 {
 	long bytes;
@@ -116,6 +132,10 @@ int bytes_available(int fd)
 	return bytes;
 }
 
+/*
+ * Reads len bytes from an TCP or UDP socket and places the result in the
+ * memory area pointed by buf. Returns false on error.
+ */
 bool read_socket(int sockfd, bool connected, void *buf, size_t len, int flags)
 {
 	ssize_t read;
@@ -134,6 +154,10 @@ bool read_socket(int sockfd, bool connected, void *buf, size_t len, int flags)
 	return (read == (ssize_t)len);
 }
 
+/*
+ * Writes len bytes (read from the memory area pointed by buf) to a TCP or UDP
+ * socket. Returns false on error.
+ */
 bool write_socket(int sockfd, struct sockaddr_storage *dest,
 		const void *buf, size_t len, int flags)
 {
@@ -154,6 +178,12 @@ bool write_socket(int sockfd, struct sockaddr_storage *dest,
 	return (sent == (ssize_t)len);
 }
 
+/*
+ * Returns the address (in the memory area pointed by ipstr) and port (in the
+ * memory area pointed by port) in presentation format associated to the
+ * connected socket specified by sockfd. size must contain the size of the
+ * memory area pointed by ipstr.
+ */
 bool get_peer_address(int sockfd, char *ipstr, socklen_t size, in_port_t *port)
 {
 	socklen_t len;
@@ -179,6 +209,9 @@ bool get_peer_address(int sockfd, char *ipstr, socklen_t size, in_port_t *port)
 	return false;
 }
 
+/*
+ * Translates an address in presentation format to internal format.
+ */
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 bool get_network_address(const char *src, struct in6_addr *dst)
 #else
@@ -192,6 +225,10 @@ bool get_network_address(const char *src, struct in_addr *dst)
 	return true;
 }
 
+/*
+ * fills the sockaddr_storage structure pointed by ss with the values
+ * specified.
+ */
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 void fill_sockaddr(struct sockaddr_storage *ss,
 		struct in6_addr address, in_port_t port)
@@ -212,6 +249,9 @@ void fill_sockaddr(struct sockaddr_storage *ss,
 #endif
 }
 
+/*
+ * Connects to a server and returns the connection socket.
+ */
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 int connect_to_server(struct in6_addr addr, in_port_t port)
 #else

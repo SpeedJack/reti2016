@@ -6,10 +6,17 @@
 #include "hashtable.h"
 #include "list.h"
 
+/*
+ * The list contains all logged in (with username) clients, ordered
+ * alphabetically; while the hashtable cointains all connected clients.
+ */
 static struct list_head *client_list = NULL;
 static struct list_head client_hashtable[HASHTABLE_SIZE];
 static unsigned int logged_count;
 
+/*
+ * Allocates the necessary space for the list and the hashtable.
+ */
 void client_list_init()
 {
 	if (client_list)
@@ -38,6 +45,9 @@ void remove_client(struct game_client *client)
 	delete_client(client);
 }
 
+/*
+ * Creates a client (not logged in) and adds it to the hashtable.
+ */
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 void add_client(struct in6_addr address, int sockfd)
 #else
@@ -50,6 +60,10 @@ void add_client(struct in_addr address, int sockfd)
 	hashtable_insert(client_hashtable, client, &client->sock);
 }
 
+/*
+ * Logins a client, adding an username and a port to it. It also adds the
+ * client to the ordered list.
+ */
 void login_client(struct game_client *client, const char *username,
 		in_port_t port)
 {
@@ -91,11 +105,18 @@ static struct game_client *next_client()
 	return (struct game_client *)hashtable_next(client_hashtable);
 }
 
+/*
+ * Checks if the username passed as argument is not already used by another
+ * client.
+ */
 bool unique_username(const char *username)
 {
 	return (get_client_by_username(username) == NULL);
 }
 
+/*
+ * Returns the maximum socket file descriptor of the clients in the list.
+ */
 unsigned int get_max_fd()
 {
 	int maxfd;
@@ -108,11 +129,17 @@ unsigned int get_max_fd()
 	return maxfd;
 }
 
+/*
+ * Returns the total number of logged in (with username) clients.
+ */
 unsigned int logged_client_count()
 {
 	return logged_count;
 }
 
+/*
+ * Deletes all remaining allocated data in the list.
+ */
 void client_list_destroy()
 {
 	struct game_client *client;
