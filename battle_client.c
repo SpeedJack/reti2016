@@ -533,6 +533,8 @@ static bool get_opponent_message()
 		putchar('\n');
 		break;
 	case MSG_SHOT:
+		/*TODO: in shot e result, check for turn and disconnect if
+		wrong */
 		process_msg_shot((struct msg_shot *)msg);
 		break;
 	case MSG_RESULT:

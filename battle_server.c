@@ -151,7 +151,8 @@ static void send_client_list(struct game_client *client)
 
 send_free_and_exit:
 	send_ans_who(client->sock, players, count);
-	free(players);
+	if (players)
+		free(players);
 }
 
 static void do_login(struct game_client *client, struct req_login *msg)
