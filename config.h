@@ -1,23 +1,53 @@
+/* 0 for ipv4 mode; 1 for ipv6 mode */
 #define	USE_IPV6_ADDRESSING	0
 
+/* constants that depends on the ip version choosen */
 #if defined(USE_IPV6_ADDRESSING) && USE_IPV6_ADDRESSING == 1
 #define ADDRESS_FAMILY		AF_INET6
+/* default ipv6 server address used when not specified in command line */
 #define	DEFAULT_SERVER_ADDRESS	"::1"
 #define	STRUCT_SOCKADDR_SIZE	sizeof(struct sockaddr_in6)
 #define	ADDRESS_STRING_LENGTH	INET6_ADDRSTRLEN
 #else
 #define ADDRESS_FAMILY		AF_INET
+/* default ipv4 server address used when not specified in command line */
 #define	DEFAULT_SERVER_ADDRESS	"127.0.0.1"
 #define	STRUCT_SOCKADDR_SIZE	sizeof(struct sockaddr_in)
 #define	ADDRESS_STRING_LENGTH	INET_ADDRSTRLEN
 #endif
 
+/* default port used when not specified in command line */
 #define	DEFAULT_SERVER_PORT	6683
 
+/* maximum pending connections to the server */
 #define	LISTEN_BACKLOG		10
 
+/* seconds to wait before retrying to re-bind the address (used by server) */
 #define	BIND_INUSE_RETRY_SECS	5
 
+
+/* number of entries in the hashtable used to maintain the list of connected
+ * clients (server) */
+#define	HASHTABLE_SIZE		16
+
+/* buffer sizes for various inputs (client) */
+#define COMMAND_BUFFER_SIZE	100
+#define UINT16_BUFFER_SIZE	10
+#define	CELL_INPUT_BUFFER_SIZE	10
+
+/* username constraints */
+#define MIN_USERNAME_LENGTH	3
+#define	MAX_USERNAME_LENGTH	20
+#define MAX_USERNAME_SIZE	MAX_USERNAME_LENGTH+1
+#define USERNAME_ALLOWED_CHARS	\
+	"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+
+/* UDP port constraints */
+#define	MIN_UDP_PORT_NUMBER	1024
+#define	MAX_UDP_PORT_NUMBER	65535
+
+/* set to 0 to disable colored output; 1 to enable colored output.
+ * (for !show & !who) */
 #define	ENABLE_COLORS		1
 
 #if defined(ENABLE_COLORS) && ENABLE_COLORS == 1
@@ -59,33 +89,26 @@
 #endif
 #define	COLOR_NONE		""
 
+/* color for error messages */
 #define	COLOR_ERROR		COLOR_BOLD_RED
+
+/* colors for player status (used in !who) */
 #define	COLOR_PLAYER_IDLE	COLOR_GREEN
 #define	COLOR_PLAYER_IN_GAME	COLOR_RED
 #define	COLOR_PLAYER_AWAITING	COLOR_BLUE
 
-#define MIN_USERNAME_LENGTH	3
-#define	MAX_USERNAME_LENGTH	20
-#define MAX_USERNAME_SIZE	MAX_USERNAME_LENGTH+1
-#define USERNAME_ALLOWED_CHARS	\
-	"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_"
-
-#define	MIN_UDP_PORT_NUMBER	1024
-#define	MAX_UDP_PORT_NUMBER	65535
-
+/* used for proper output alignment for the list of players (!who) */
 #define	WHO_STATUS_LENGTH	37
 #define	WHO_STATUS_BUFFER_SIZE	WHO_STATUS_LENGTH+1
 
-#define COMMAND_BUFFER_SIZE	100
-#define UINT16_BUFFER_SIZE	10
-#define	CELL_INPUT_BUFFER_SIZE	10
-
-#define	HASHTABLE_SIZE		16
-
+/* precision used to check for timeouts, in seconds (client & server) */
 #define	SELECT_TIMEOUT_SECONDS	3
+
+/* timeouts in seconds */
 #define	PLAY_REQUEST_TIMEOUT	60
 #define	IN_GAME_TIMEOUT		60
 
+/* game table and ships constraints */
 #define	GAME_TABLE_ROWS		6
 #define	GAME_TABLE_COLS		6
 #define	MIN_ROW_LETTER		'A'
@@ -94,6 +117,7 @@
 #define	MAX_COL_NUMBER		MIN_COL_NUMBER + GAME_TABLE_COLS - 1
 #define	SHIP_COUNT		7
 
+/* symbols for game table printing (!show) */
 #define	WATER_SYMBOL		COLOR_BLUE "#" COLOR_RESET
 #define	SHIP_SYMBOL		COLOR_BOLD_GREEN "@" COLOR_RESET
 #define	MISS_SYMBOL		COLOR_NONE "-" COLOR_RESET
