@@ -14,6 +14,8 @@
 #include "game_client.h"
 #endif
 
+/* TODO: check source address on UDP read */
+
 #define	MSG_BODY_SIZE(_tp)	sizeof(_tp) - sizeof(struct msg_header)
 
 #define	MSG_ZERO_FILL(_m)	memset(((struct message *)&(_m))->body, 0,\

@@ -730,8 +730,8 @@ static void wait_for_input()
 	select_timeout = on_newline = false;
 
 /* FIXME: prompt sometimes shows when it shouldn't (eg. when MSG_READY is
- * received while not in game because the opponent has disconnected during the
- * setup (ship placing) phase) or two blank lines are printed above it */
+ * received while not in game because the opponent was AFK during the setup
+ * (ship placing) phase) */
 	for (;;) {
 		int fd, ready;
 		struct timeval timeout;
