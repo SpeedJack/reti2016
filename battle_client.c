@@ -884,24 +884,20 @@ int main(int argc, char **argv)
 		printf("Usage: %s <address> <port>\n", argv[0]);
 		exit(EXIT_SUCCESS);
 	}
-	if (argc < 3) {
-		if (inet_pton(ADDRESS_FAMILY, DEFAULT_SERVER_ADDRESS,
-					&addr) != 1) {
-			print_error("Invalid address DEFAULT_SERVER_ADDRESS",
-					0);
-			exit(EXIT_FAILURE);
-		}
-		port = DEFAULT_SERVER_PORT;
-	} else {
+	if (argc > 1) {
 		if (inet_pton(ADDRESS_FAMILY, argv[1], &addr) != 1) {
 			print_error("Invalid address", 0);
 			exit(EXIT_FAILURE);
 		}
+	}
+	if (argc > 2) {
 		if (!string_to_uint16(argv[2], &port) || port == 0) {
 			print_error("Invalid port. Enter a value between 1 and 65535",
 					0);
 			exit(EXIT_FAILURE);
 		}
+	} else {
+		port = DEFAULT_SERVER_PORT;
 	}
 
 	server_sock = connect_to_server(addr, htons(port));
