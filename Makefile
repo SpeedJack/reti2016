@@ -29,7 +29,7 @@ OBJs = $(COBJs) $(SOBJs)
 
 all: $(EXEs)
 
-nodebug: CFLAGS = $(STDFLAGS) -DNDEBUG
+nodebug: CFLAGS = $(STDFLAGS) -O1 -DNDEBUG
 nodebug: $(EXEs)
 
 battle_client: $(COBJs)
