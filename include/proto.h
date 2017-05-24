@@ -38,12 +38,14 @@ enum __attribute__ ((packed)) play_response {
 	PLAY_TIMEDOUT
 };
 
+/* element of the flexible array used in ANS_WHO */
 struct __attribute__ ((packed)) who_player {
 	char username[MAX_USERNAME_SIZE];
 	enum player_status status;
 	char opponent[MAX_USERNAME_SIZE];
 };
 
+/* common header */
 struct __attribute__ ((packed)) msg_header {
 	char magic[2];
 	enum msg_type type;
@@ -51,42 +53,50 @@ struct __attribute__ ((packed)) msg_header {
 	uint32_t length;
 };
 
+/* generic message */
 struct message {
 	struct msg_header header;
 	char body[];
 };
 
+/* login request (carries choosen username and port) */
 struct __attribute__ ((packed)) req_login {
 	struct msg_header header;
 	char username[MAX_USERNAME_SIZE];
 	in_port_t udp_port;
 };
 
+/* login response */
 struct __attribute__ ((packed)) ans_login {
 	struct msg_header header;
 	enum login_response response;
 };
 
+/* list of players request (!who) */
 struct __attribute__ ((packed)) req_who {
 	struct msg_header header;
 };
 
-
+/* list of players response */
 struct __attribute__ ((packed)) ans_who {
 	struct msg_header header;
 	struct who_player players[];
 };
 
+/* play request (!connect) */
 struct __attribute__ ((packed)) req_play {
 	struct msg_header header;
 	char opponent[MAX_USERNAME_SIZE];
 };
 
+/* answer to the play request from a client */
 struct __attribute__ ((packed)) req_play_ans {
 	struct msg_header header;
 	bool accept;
 };
 
+/* answer sent to both clients when a match is started
+ * (carries response, address and port) */
 struct __attribute__ ((packed)) ans_play {
 	struct msg_header header;
 	enum play_response response;
@@ -98,26 +108,32 @@ struct __attribute__ ((packed)) ans_play {
 	in_port_t udp_port;
 };
 
+/* message exchanged when clients have set up all the ships on the table */
 struct __attribute__ ((packed)) msg_ready {
 	struct msg_header header;
 };
 
+/* message that carries shot coordinates (!shot) */
 struct __attribute__ ((packed)) msg_shot {
 	struct msg_header header;
 	unsigned int row;
 	unsigned int col;
 };
 
+/* shot response, carries if a ship have been hit or not */
 struct __attribute__ ((packed)) msg_result {
 	struct msg_header header;
 	bool hit;
 };
 
+/* inform the server (and the server forwards it to the other client) when a
+ * a match is over */
 struct __attribute__ ((packed)) msg_endgame {
 	struct msg_header header;
 	bool disconnected;
 };
 
+/* bad request to the server (client terminates on reception) */
 struct __attribute__ ((packed)) ans_badreq {
 	struct msg_header header;
 };
