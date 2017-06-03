@@ -1,22 +1,11 @@
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include "console.h"
 #include "netutil.h"
-
-/*int set_nonblocking_socket(int fd)
-{
-	int flags;
-
-	if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
-		flags = 0;
-	return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}*/
 
 /*
  * Open a new listening socket from any address on the port specified by port.

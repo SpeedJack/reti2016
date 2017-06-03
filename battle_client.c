@@ -1,8 +1,5 @@
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
-#include <netdb.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,8 +8,6 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include "console.h"
 #include "game_client.h"
 #include "netutil.h"

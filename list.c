@@ -1,7 +1,5 @@
 #include <errno.h>
-#include <stddef.h>
 #include <stdlib.h>
-#include <string.h>
 #include <strings.h>
 #include "console.h"
 #include "list.h"

@@ -1,17 +1,11 @@
 #include <assert.h>
 #include <errno.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <netinet/in.h>
 #include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include "game_client.h"
 #include "client_list.h"
 #include "console.h"
 #include "netutil.h"
