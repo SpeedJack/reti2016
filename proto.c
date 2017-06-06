@@ -9,7 +9,6 @@
 #ifdef	BATTLE_SERVER
 #include <arpa/inet.h>
 #include "client_list.h"
-#include "game_client.h"
 #endif
 
 /* TODO: check source address on UDP read */
