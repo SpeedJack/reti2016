@@ -1,10 +1,25 @@
+/*
+ * This file is part of reti2016.
+ *
+ * reti2016 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * reti2016 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * See file LICENSE for more details.
+ */
+
 #ifndef	_BATTLE_NETUTIL_H
 #define	_BATTLE_NETUTIL_H
 
 #include <stddef.h>
 #include <netinet/in.h>
 
-int set_nonblocking_socket(int fd);
 int listen_on_port(in_port_t port);
 int accept_socket_connection(int sockfd, struct sockaddr_storage *sa);
 int open_local_port(in_port_t port);
